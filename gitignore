@@ -1,0 +1,16 @@
+# banco de dados com os dados reais do bar (nunca vai para o git)
+estoque.db
+*.db
+*.db-journal
+
+# arquivos gerados pelo Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# editor / sistema
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
