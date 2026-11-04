@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block titulo %}Cadastro de produtos{% endblock %}
+{% block conteudo %}
+
+<div class="titulo-linha">
+  <h1>Cadastros</h1>
+  <a class="botao" href="{{ url_for('cadastro_produto_novo') }}">+ Novo produto</a>
+</div>
+{% include "_abas_cadastros.html" %}
+
+<p class="filtro-linha">
+  <a href="{{ url_for('cadastro_produtos', inativos=(0 if inativos else 1)) }}">{{ 'Ocultar inativos' if inativos else 'Mostrar inativos' }}</a>
+</p>
+
+{% if not produtos %}<p class="vazio">Nenhum produto cadastrado.</p>{% endif %}
+
+<div class="itens">
+  {% for p in produtos %}
+  <article class="item {{ 'inativo' if not p.ativo }}">
+    <div class="item-topo">
+      <h3>{{ p.nome }}</h3>
+      {% if not p.ativo %}<span class="selo selo-inativo">Fora de venda</span>{% endif %}
+      <span class="item-cat">{{ p.categoria }}</span>
+    </div>
+    <p class="preco">
+      {{ p.preco_vigente|moeda }}
+      {% if p.origem_preco == 'promocao' %}<span class="selo selo-baixo">Promoção hoje</span>
+        <span class="preco-antigo">{{ p.preco_padrao|moeda }}</span>{% endif %}
+    </p>
+    <ul class="receita-lista">
+      {% for linha in p.receita %}<li>{{ linha }}</li>{% endfor %}
+    </ul>
+    <div class="acoes">
+      <a class="botao botao-leve botao-pequeno" href="{{ url_for('cadastro_produto_editar', produto_id=p.id) }}">Editar</a>
+      <a class="botao botao-leve botao-pequeno" href="{{ url_for('cadastro_promocoes', produto_id=p.id) }}">Promoções</a>
+      <form method="post" action="{{ url_for('cadastro_produto_ativo', produto_id=p.id) }}">
+        <input type="hidden" name="ativo" value="{{ 0 if p.ativo else 1 }}">
+        <button type="submit" class="botao botao-leve botao-pequeno">{{ 'Tirar de venda' if p.ativo else 'Voltar à venda' }}</button>
+      </form>
+    </div>
+  </article>
+  {% endfor %}
+</div>
+
+{% endblock %}

@@ -1,0 +1,6 @@
+<div class="abas" role="tablist">
+  <a href="{{ url_for('cadastro_insumos') }}"      class="{{ 'ativa' if aba == 'insumos' }}">Insumos</a>
+  <a href="{{ url_for('cadastro_fornecedores') }}" class="{{ 'ativa' if aba == 'fornecedores' }}">Fornecedores</a>
+  <a href="{{ url_for('cadastro_categorias') }}"   class="{{ 'ativa' if aba == 'categorias' }}">Categorias</a>
+  <a href="{{ url_for('cadastro_produtos') }}"     class="{{ 'ativa' if aba == 'produtos' }}">Produtos e receitas</a>
+</div>

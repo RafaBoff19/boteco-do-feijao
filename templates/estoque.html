@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block titulo %}Estoque{% endblock %}
+{% block conteudo %}
+
+<div class="titulo-linha">
+  <h1>Estoque</h1>
+  <a class="botao" href="{{ url_for('movimentar') }}">+ Movimentar</a>
+</div>
+
+{% if alertas %}
+<section class="alertas" aria-label="Alertas pendentes">
+  <h2>Alertas pendentes <span class="contador">{{ alertas|length }}</span></h2>
+  {% for a in alertas %}
+  <form class="alerta alerta-{{ a.tipo }}" method="post" action="{{ url_for('alerta_lido', alerta_id=a.id) }}">
+    <div>
+      <strong>{{ a.insumo }}</strong>
+      {% if a.tipo == 'negativo' %}com estoque negativo ({{ a.saldo_no_momento|br }} {{ a.unidade }}){% else %}no estoque mínimo ou abaixo ({{ a.saldo_no_momento|br }} {{ a.unidade }}){% endif %}
+      <span class="quando">{{ a.criado_em }}</span>
+    </div>
+    <button type="submit" class="botao botao-leve">Marcar como lido</button>
+  </form>
+  {% endfor %}
+</section>
+{% endif %}
+
+{% for categoria, itens in grupos.items() %}
+<section class="grupo">
+  <h2>{{ categoria }}</h2>
+  <div class="cards">
+    {% for i in itens %}
+    <article class="card card-{{ i.status }}">
+      <div class="card-topo">
+        <h3>{{ i.nome }}</h3>
+        <span class="selo selo-{{ i.status }}">{{ i.status_texto }}</span>
+      </div>
+      <p class="saldo">{{ i.total|br(0) }} <span class="un">{{ i.unidade }}</span></p>
+      <p class="equiv">≈ {{ i.em_compra|br(1) }} {{ i.unidade_compra }}(s)</p>
+      <p class="detalhe">
+        {% for setor, valor in i.por_setor %}{{ setor }}: <strong>{{ valor|br(0) }}</strong>{% if not loop.last %} · {% endif %}{% endfor %}
+        {% if i.minimo is not none %}<br>Mínimo: {{ i.minimo|br(0) }} {{ i.unidade }}{% endif %}
+      </p>
+    </article>
+    {% endfor %}
+  </div>
+</section>
+{% endfor %}
+
+{% endblock %}

@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block titulo %}Entregas{% endblock %}
+{% block conteudo %}
+<div class="titulo-linha">
+  <h1>Entregas <span class="contador" style="{{ 'display:none' if not fila }}">{{ fila|length }}</span></h1>
+  <span class="detalhe">Atualiza sozinho a cada 15 segundos</span>
+</div>
+
+{% if not fila %}<p class="vazio">Nenhum item aguardando entrega.</p>{% endif %}
+
+<ul class="itens-pedido">
+  {% for i in fila %}
+  <li class="pedido pedido-pedido">
+    <div class="pedido-topo">
+      <strong>{{ i.quantidade }}× {{ i.produto }}</strong>
+      <span class="detalhe">{{ i.identificacao }}{% if i.mesa %} · Mesa {{ i.mesa }}{% endif %} · pedido às {{ i.criado_em[11:16] }}</span>
+    </div>
+    {% if i.escolhas or i.observacao %}
+    <div class="detalhe">{% if i.escolhas %}{{ i.escolhas }}{% endif %}{% if i.escolhas and i.observacao %} · {% endif %}{% if i.observacao %}<em>{{ i.observacao }}</em>{% endif %}</div>
+    {% endif %}
+    <div class="acoes-pedido">
+      <form method="post" action="{{ url_for('item_entregar', item_id=i.id) }}">
+        <button class="botao botao-entregue" type="submit">ITEM ENTREGUE</button>
+      </form>
+      <form method="post" action="{{ url_for('item_cancelar', item_id=i.id) }}">
+        <button class="botao botao-leve botao-pequeno" type="submit">Cancelar</button>
+      </form>
+    </div>
+  </li>
+  {% endfor %}
+</ul>
+{% endblock %}
+{% block scripts %}
+<script>
+  // Recarrega a fila sozinho, mas não enquanto alguém está digitando.
+  setInterval(function () {
+    var a = document.activeElement;
+    if (!a || a === document.body) { location.reload(); }
+  }, 15000);
+</script>
+{% endblock %}

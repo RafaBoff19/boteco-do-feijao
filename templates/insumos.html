@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block titulo %}Cadastro de insumos{% endblock %}
+{% block conteudo %}
+
+<div class="titulo-linha">
+  <h1>Cadastros</h1>
+  <a class="botao" href="{{ url_for('cadastro_insumo_novo') }}">+ Novo insumo</a>
+</div>
+{% include "_abas_cadastros.html" %}
+
+<p class="filtro-linha">
+  <a href="{{ url_for('cadastro_insumos', inativos=(0 if inativos else 1)) }}">{{ 'Ocultar inativos' if inativos else 'Mostrar inativos' }}</a>
+</p>
+
+{% if not insumos %}<p class="vazio">Nenhum insumo cadastrado.</p>{% endif %}
+
+<div class="itens">
+  {% for i in insumos %}
+  <article class="item {{ 'inativo' if not i.ativo }}">
+    <div class="item-topo">
+      <h3>{{ i.nome }}</h3>
+      {% if not i.ativo %}<span class="selo selo-inativo">Inativo</span>{% endif %}
+      <span class="item-cat">{{ i.categoria or 'Sem categoria' }}</span>
+    </div>
+    <p class="detalhe">
+      Conta em <strong>{{ i.unidade_consumo }}</strong> · compra em <strong>{{ i.unidade_compra }}</strong>
+      (1 {{ i.unidade_compra }} = {{ i.fator_compra|br }} {{ i.unidade_consumo }})
+    </p>
+    <p class="detalhe">
+      Mínimo:
+      {% if i.estoque_minimo is not none %}<strong>{{ i.estoque_minimo|br }} {{ i.unidade_consumo }}</strong> (próprio)
+      {% elif i.minimo_efetivo is not none %}<strong>{{ i.minimo_efetivo|br }} {{ i.unidade_consumo }}</strong> (da categoria)
+      {% else %}não definido{% endif %}
+      · Saldo: <strong>{{ i.saldo_total|br }} {{ i.unidade_consumo }}</strong>
+      <br>Fornecedores: {{ i.fornecedores or '—' }}
+    </p>
+    <div class="acoes">
+      <a class="botao botao-leve botao-pequeno" href="{{ url_for('cadastro_insumo_editar', insumo_id=i.id) }}">Editar</a>
+      <form method="post" action="{{ url_for('cadastro_insumo_ativo', insumo_id=i.id) }}">
+        <input type="hidden" name="ativo" value="{{ 0 if i.ativo else 1 }}">
+        <button type="submit" class="botao botao-leve botao-pequeno">{{ 'Desativar' if i.ativo else 'Reativar' }}</button>
+      </form>
+    </div>
+  </article>
+  {% endfor %}
+</div>
+
+{% endblock %}

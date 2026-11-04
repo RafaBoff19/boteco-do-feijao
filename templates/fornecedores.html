@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block titulo %}Cadastro de fornecedores{% endblock %}
+{% block conteudo %}
+
+<h1>Cadastros</h1>
+{% include "_abas_cadastros.html" %}
+
+<form method="post" class="form form-largo" novalidate>
+  <h2>{{ 'Editar fornecedor' if form.get('id') else 'Novo fornecedor' }}</h2>
+  <input type="hidden" name="id" value="{{ form.get('id', '') }}">
+  <div class="linha">
+    <div class="campo">
+      <label for="nome">Nome</label>
+      <input id="nome" name="nome" type="text" autocomplete="off" value="{{ form.get('nome', '') }}" placeholder="ex.: Distribuidora Central">
+    </div>
+    <div class="campo">
+      <label for="tipo">Tipo <span class="opc">(opcional)</span></label>
+      <input id="tipo" name="tipo" type="text" list="lista-tipo" autocomplete="off" value="{{ form.get('tipo') or '' }}">
+      <datalist id="lista-tipo"><option value="distribuidora"><option value="fruteira"><option value="mercado"><option value="atacado"></datalist>
+    </div>
+    <div class="campo">
+      <label for="telefone">Telefone <span class="opc">(opcional)</span></label>
+      <input id="telefone" name="telefone" type="text" inputmode="tel" autocomplete="off" value="{{ form.get('telefone') or '' }}">
+    </div>
+  </div>
+  <button type="submit" class="botao">{{ 'Salvar alterações' if form.get('id') else 'Cadastrar fornecedor' }}</button>
+  {% if form.get('id') %}<a class="voltar-inline" href="{{ url_for('cadastro_fornecedores') }}">Cancelar edição</a>{% endif %}
+</form>
+
+<p class="filtro-linha">
+  <a href="{{ url_for('cadastro_fornecedores', inativos=(0 if inativos else 1)) }}">{{ 'Ocultar inativos' if inativos else 'Mostrar inativos' }}</a>
+</p>
+
+{% if not fornecedores %}<p class="vazio">Nenhum fornecedor cadastrado.</p>{% endif %}
+<div class="itens">
+  {% for f in fornecedores %}
+  <article class="item {{ 'inativo' if not f.ativo }}">
+    <div class="item-topo">
+      <h3>{{ f.nome }}</h3>
+      {% if not f.ativo %}<span class="selo selo-inativo">Inativo</span>{% endif %}
+      {% if f.tipo %}<span class="item-cat">{{ f.tipo }}</span>{% endif %}
+    </div>
+    <p class="detalhe">{{ f.telefone or 'Sem telefone' }} · fornece {{ f.qtd_insumos }} insumo(s) ativo(s)</p>
+    <div class="acoes">
+      <a class="botao botao-leve botao-pequeno" href="{{ url_for('cadastro_fornecedores', editar=f.id) }}">Editar</a>
+      <form method="post" action="{{ url_for('cadastro_fornecedor_ativo', fornecedor_id=f.id) }}">
+        <input type="hidden" name="ativo" value="{{ 0 if f.ativo else 1 }}">
+        <button type="submit" class="botao botao-leve botao-pequeno">{{ 'Desativar' if f.ativo else 'Reativar' }}</button>
+      </form>
+    </div>
+  </article>
+  {% endfor %}
+</div>
+
+{% endblock %}

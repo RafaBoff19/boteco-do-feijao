@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block titulo %}Promoções{% endblock %}
+{% block conteudo %}
+
+<h1>Promoções: {{ produto.nome }}</h1>
+{% include "_abas_cadastros.html" %}
+
+<p class="resumo-preco">
+  Preço padrão: <strong>{{ produto.preco_padrao|moeda }}</strong> ·
+  Valendo agora: <strong>{{ vigente.preco|moeda }}</strong>
+  {% if vigente.origem == 'promocao' %}<span class="selo selo-baixo">Promoção</span>{% endif %}
+</p>
+
+<form method="post" class="form form-largo" novalidate>
+  <h2>Nova promoção</h2>
+  <div class="campo">
+    <label for="preco">Preço na promoção (R$)</label>
+    <input id="preco" name="preco" type="text" inputmode="decimal" autocomplete="off" value="{{ form.get('preco', '') }}" placeholder="ex.: 14,00">
+  </div>
+
+  <fieldset class="checks">
+    <legend>Dias da semana <span class="opc">(deixe vazio se for só por período)</span></legend>
+    <div class="chips">
+      {% for n in range(7) %}
+      <label class="chip"><input type="checkbox" name="dias" value="{{ n }}" {{ 'checked' if n|string in marcados }}><span>{{ dias_nomes[n] }}</span></label>
+      {% endfor %}
+    </div>
+  </fieldset>
+
+  <div class="linha">
+    <div class="campo">
+      <label for="data_inicio">De <span class="opc">(opcional)</span></label>
+      <input id="data_inicio" name="data_inicio" type="date" value="{{ form.get('data_inicio', '') }}">
+    </div>
+    <div class="campo">
+      <label for="data_fim">Até <span class="opc">(opcional)</span></label>
+      <input id="data_fim" name="data_fim" type="date" value="{{ form.get('data_fim', '') }}">
+    </div>
+  </div>
+  <p class="dica">Vale o dia de trabalho: a madrugada (até as 6h) conta como a noite anterior. Com mais de uma promoção valendo, vale a de menor preço.</p>
+  <button type="submit" class="botao">Cadastrar promoção</button>
+</form>
+
+<h2>Promoções cadastradas</h2>
+{% if not promocoes %}<p class="vazio">Nenhuma promoção para este produto.</p>{% endif %}
+<div class="itens">
+  {% for p in promocoes %}
+  <article class="item {{ 'inativo' if not p.ativo }}">
+    <div class="item-topo">
+      <h3>{{ p.preco|moeda }}</h3>
+      {% if p.vale_hoje %}<span class="selo selo-ok">Vale hoje</span>{% endif %}
+      {% if not p.ativo %}<span class="selo selo-inativo">Desativada</span>{% endif %}
+    </div>
+    <p class="detalhe">
+      {{ p.dias_texto|capitalize }}
+      {% if p.data_inicio or p.data_fim %}· período: {{ p.data_inicio or 'sem início' }} até {{ p.data_fim or 'sem fim' }}{% else %}· sem período{% endif %}
+    </p>
+    <div class="acoes">
+      <form method="post" action="{{ url_for('cadastro_promocao_acao', promocao_id=p.id, acao=('desativar' if p.ativo else 'ativar')) }}">
+        <button type="submit" class="botao botao-leve botao-pequeno">{{ 'Desativar' if p.ativo else 'Ativar' }}</button>
+      </form>
+      <form method="post" action="{{ url_for('cadastro_promocao_acao', promocao_id=p.id, acao='excluir') }}">
+        <button type="submit" class="botao botao-leve botao-pequeno">Excluir</button>
+      </form>
+    </div>
+  </article>
+  {% endfor %}
+</div>
+
+<p class="voltar"><a href="{{ url_for('cadastro_produtos') }}">Voltar para os produtos</a></p>
+
+{% endblock %}

@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block titulo %}{{ 'Editar produto' if produto else 'Novo produto' }}{% endblock %}
+
+{% macro linha_receita(l) %}
+<div class="linha-receita">
+  <div class="campo">
+    <label>Ingrediente</label>
+    <select name="insumo">
+      <option value="">Escolha...</option>
+      {% for i in insumos %}<option value="{{ i.id }}" data-un="{{ i.unidade_consumo }}" {{ 'selected' if l.get('insumo') == i.id|string }}>{{ i.nome }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="campo campo-qtd">
+    <label>Quantidade <span class="un-rotulo"></span></label>
+    <input name="quantidade" type="text" inputmode="decimal" autocomplete="off" value="{{ l.get('quantidade', '') }}">
+  </div>
+  <div class="campo">
+    <label>Escolha <span class="opc">(opcional)</span></label>
+    <input name="grupo" type="text" list="lista-grupos" autocomplete="off" value="{{ l.get('grupo', '') }}" placeholder="ex.: destilado">
+  </div>
+  <button type="button" class="remover" aria-label="Remover ingrediente" title="Remover ingrediente">✕</button>
+</div>
+{% endmacro %}
+
+{% block conteudo %}
+
+<h1>{{ 'Editar produto' if produto else 'Novo produto' }}</h1>
+{% include "_abas_cadastros.html" %}
+
+<form method="post" class="form form-largo" novalidate>
+
+  <div class="linha">
+    <div class="campo" style="flex: 2">
+      <label for="nome">Nome</label>
+      <input id="nome" name="nome" type="text" autocomplete="off" value="{{ form.get('nome', '') }}" placeholder="ex.: Caipirinha de morango">
+    </div>
+    <div class="campo">
+      <label for="categoria">Categoria</label>
+      <input id="categoria" name="categoria" type="text" list="lista-categorias" autocomplete="off" value="{{ form.get('categoria', '') }}">
+      <datalist id="lista-categorias">{% for c in categorias %}<option value="{{ c }}">{% endfor %}</datalist>
+    </div>
+    <div class="campo">
+      <label for="preco">Preço (R$)</label>
+      <input id="preco" name="preco" type="text" inputmode="decimal" autocomplete="off" value="{{ form.get('preco', '') }}" placeholder="ex.: 18,00">
+    </div>
+  </div>
+
+  <fieldset class="receita">
+    <legend>Receita: o que sai do estoque a cada unidade vendida</legend>
+    <div id="linhas">
+      {% for l in linhas %}{{ linha_receita(l) }}{% endfor %}
+    </div>
+    <button type="button" id="adicionar" class="botao botao-leve botao-pequeno">+ Ingrediente</button>
+    <p class="dica">
+      <strong>Escolha:</strong> para o cliente escolher um entre vários (ex.: vodka <em>ou</em> cachaça), escreva a mesma palavra
+      (ex.: <em>destilado</em>) em dois ou mais ingredientes. Só um deles sai do estoque a cada pedido.
+      Deixe em branco nos ingredientes fixos.
+    </p>
+    <datalist id="lista-grupos">{% for g in grupos %}<option value="{{ g }}">{% endfor %}</datalist>
+  </fieldset>
+
+  <template id="modelo-linha">{{ linha_receita({}) }}</template>
+
+  <button type="submit" class="botao botao-grande">{{ 'Salvar alterações' if produto else 'Cadastrar produto' }}</button>
+  <p class="voltar"><a href="{{ url_for('cadastro_produtos') }}">Cancelar e voltar</a></p>
+</form>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const area = document.getElementById('linhas');
+  const modelo = document.getElementById('modelo-linha');
+
+  function atualizarUnidade(linha) {
+    const sel = linha.querySelector('select');
+    const opt = sel.options[sel.selectedIndex];
+    linha.querySelector('.un-rotulo').textContent = opt && opt.dataset.un ? '(' + opt.dataset.un + ')' : '';
+  }
+
+  function ligar(linha) {
+    linha.querySelector('select').addEventListener('change', function () { atualizarUnidade(linha); });
+    linha.querySelector('.remover').addEventListener('click', function () {
+      if (area.children.length > 1) { linha.remove(); }
+      else { linha.querySelectorAll('input').forEach(function (i) { i.value = ''; }); linha.querySelector('select').value = ''; atualizarUnidade(linha); }
+    });
+    atualizarUnidade(linha);
+  }
+
+  area.querySelectorAll('.linha-receita').forEach(ligar);
+  document.getElementById('adicionar').addEventListener('click', function () {
+    area.appendChild(modelo.content.cloneNode(true));
+    const nova = area.lastElementChild;
+    ligar(nova);
+    nova.querySelector('select').focus();
+  });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block titulo %}Movimentar{% endblock %}
+{% block conteudo %}
+
+<h1>Movimentar estoque</h1>
+
+<form method="post" class="form" id="form-mov" novalidate>
+
+  <fieldset class="tipos">
+    <legend>O que aconteceu?</legend>
+    {% for valor, nome in [('entrada','Entrada'), ('perda','Perda'), ('saida','Saída'), ('transferencia','Transferir'), ('ajuste','Inventário')] %}
+    <label class="tipo">
+      <input type="radio" name="tipo" value="{{ valor }}" {{ 'checked' if form.get('tipo') == valor }} required>
+      <span>{{ nome }}</span>
+    </label>
+    {% endfor %}
+  </fieldset>
+
+  <div class="campo">
+    <label for="insumo">Insumo</label>
+    <select id="insumo" name="insumo" required>
+      <option value="">Escolha...</option>
+      {% for categoria, grupo in insumos|groupby('categoria') %}
+      <optgroup label="{{ categoria }}">
+        {% for i in grupo %}
+        <option value="{{ i.id }}" data-uc="{{ i.unidade_consumo }}" data-ucompra="{{ i.unidade_compra }}" data-fator="{{ i.fator_compra|br(2) }}"
+                {{ 'selected' if form.get('insumo') == i.id|string }}>{{ i.nome }}</option>
+        {% endfor %}
+      </optgroup>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="linha">
+    <div class="campo">
+      <label for="quantidade" id="rotulo-quantidade">Quantidade</label>
+      <input id="quantidade" name="quantidade" type="text" inputmode="decimal" autocomplete="off"
+             placeholder="ex.: 2 ou 1,5" value="{{ form.get('quantidade', '') }}">
+    </div>
+    <div class="campo">
+      <label for="unidade">Medida</label>
+      <select id="unidade" name="unidade">
+        <option value="consumo" {{ 'selected' if form.get('unidade', 'consumo') == 'consumo' }}>Unidade de consumo</option>
+        <option value="compra"  {{ 'selected' if form.get('unidade') == 'compra' }}>Unidade de compra</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="linha">
+    <div class="campo" id="bloco-setor">
+      <label for="setor" id="rotulo-setor">Setor</label>
+      <select id="setor" name="setor">
+        {% for s in setores %}<option value="{{ s }}" {{ 'selected' if form.get('setor', 'Estoque') == s }}>{{ s }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="campo" id="bloco-destino" data-tipos="transferencia">
+      <label for="setor_destino">Para o setor</label>
+      <select id="setor_destino" name="setor_destino">
+        {% for s in setores %}<option value="{{ s }}" {{ 'selected' if form.get('setor_destino', 'Bar') == s }}>{{ s }}</option>{% endfor %}
+      </select>
+    </div>
+  </div>
+
+  <div class="campo" data-tipos="entrada">
+    <label for="fornecedor">Fornecedor <span class="opc">(opcional)</span></label>
+    <select id="fornecedor" name="fornecedor">
+      <option value="">Sem fornecedor</option>
+      {% for f in fornecedores %}<option value="{{ f.id }}" {{ 'selected' if form.get('fornecedor') == f.id|string }}>{{ f.nome }}</option>{% endfor %}
+    </select>
+  </div>
+
+  <div class="campo" data-tipos="entrada,saida,perda,ajuste">
+    <label for="motivo" id="rotulo-motivo">Motivo</label>
+    <input id="motivo" name="motivo" type="text" autocomplete="off" value="{{ form.get('motivo', '') }}">
+  </div>
+
+  <p class="dica" id="dica"></p>
+
+  <button type="submit" class="botao botao-grande">Registrar</button>
+</form>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const tipos = document.querySelectorAll('input[name="tipo"]');
+  const insumo = document.getElementById('insumo');
+  const unidade = document.getElementById('unidade');
+
+  const TEXTOS = {
+    entrada:       { qtd: 'Quantidade que chegou',        motivo: 'Observação (opcional)',        setor: 'Entrou no setor', dica: 'Registra a chegada de mercadoria. Escolha o fornecedor se souber.' },
+    perda:         { qtd: 'Quantidade perdida',           motivo: 'Motivo da perda (obrigatório)', setor: 'Setor',           dica: 'Fruta estragada, copo quebrado, gelo derretido... O motivo é obrigatório.' },
+    saida:         { qtd: 'Quantidade que saiu',          motivo: 'Motivo da saída (obrigatório)', setor: 'Setor',           dica: 'Uso interno, consumo da casa, cortesia.' },
+    transferencia: { qtd: 'Quantidade a transferir',      motivo: '',                              setor: 'Sai do setor',    dica: 'Move do Estoque para o Bar (ou o contrário). O total não muda.' },
+    ajuste:        { qtd: 'Quantidade contada (total que existe agora)', motivo: 'Observação (opcional)', setor: 'Setor contado', dica: 'Informe o que você CONTOU na prateleira. O sistema grava só a diferença.' }
+  };
+
+  function tipoAtual() {
+    const marcado = document.querySelector('input[name="tipo"]:checked');
+    return marcado ? marcado.value : null;
+  }
+
+  function atualizarMedida() {
+    const opt = insumo.options[insumo.selectedIndex];
+    const uc = opt && opt.dataset.uc, ucompra = opt && opt.dataset.ucompra, fator = opt && opt.dataset.fator;
+    unidade.options[0].textContent = uc ? 'Em ' + uc + ' (consumo)' : 'Unidade de consumo';
+    unidade.options[1].textContent = ucompra ? 'Em ' + ucompra + '  (1 ' + ucompra + ' = ' + fator + ' ' + uc + ')' : 'Unidade de compra';
+  }
+
+  function atualizarTela() {
+    const t = tipoAtual();
+    document.querySelectorAll('[data-tipos]').forEach(function (el) {
+      el.hidden = !(t && el.dataset.tipos.split(',').includes(t));
+    });
+    const txt = TEXTOS[t];
+    if (!txt) { document.getElementById('dica').textContent = 'Escolha o tipo de movimentação acima.'; return; }
+    document.getElementById('rotulo-quantidade').textContent = txt.qtd;
+    document.getElementById('rotulo-motivo').textContent = txt.motivo;
+    document.getElementById('rotulo-setor').textContent = txt.setor;
+    document.getElementById('dica').textContent = txt.dica;
+  }
+
+  tipos.forEach(function (r) { r.addEventListener('change', atualizarTela); });
+  insumo.addEventListener('change', atualizarMedida);
+  atualizarMedida();
+  atualizarTela();
+})();
+</script>
+{% endblock %}

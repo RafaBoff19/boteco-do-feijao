@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block titulo %}Cadastro de categorias{% endblock %}
+{% block conteudo %}
+
+<h1>Cadastros</h1>
+{% include "_abas_cadastros.html" %}
+
+<form method="post" class="form form-largo" novalidate>
+  <h2>{{ 'Editar categoria' if form.get('id') else 'Nova categoria' }}</h2>
+  <input type="hidden" name="id" value="{{ form.get('id', '') }}">
+  <div class="linha">
+    <div class="campo">
+      <label for="nome">Nome</label>
+      <input id="nome" name="nome" type="text" autocomplete="off" value="{{ form.get('nome', '') }}" placeholder="ex.: Destilados">
+    </div>
+    <div class="campo">
+      <label for="estoque_minimo_padrao">Estoque mínimo padrão <span class="opc">(opcional)</span></label>
+      <input id="estoque_minimo_padrao" name="estoque_minimo_padrao" type="text" inputmode="decimal" autocomplete="off"
+             value="{{ form.get('estoque_minimo_padrao', '') }}">
+    </div>
+  </div>
+  <p class="dica">O mínimo é na unidade de consumo dos insumos da categoria (ml, g ou un). Ex.: 10 litros = 10000 · 20 fardos de 12 = 240.
+     Cada insumo pode ter um mínimo próprio, que vale no lugar deste.</p>
+  <button type="submit" class="botao">{{ 'Salvar alterações' if form.get('id') else 'Cadastrar categoria' }}</button>
+  {% if form.get('id') %}<a class="voltar-inline" href="{{ url_for('cadastro_categorias') }}">Cancelar edição</a>{% endif %}
+</form>
+
+<div class="itens">
+  {% for c in categorias %}
+  <article class="item">
+    <div class="item-topo"><h3>{{ c.nome }}</h3></div>
+    <p class="detalhe">
+      Mínimo padrão: {% if c.estoque_minimo_padrao is not none %}<strong>{{ c.estoque_minimo_padrao|br }}</strong>{% else %}não definido{% endif %}
+      · {{ c.qtd_insumos }} insumo(s) ativo(s)
+    </p>
+    <div class="acoes">
+      <a class="botao botao-leve botao-pequeno" href="{{ url_for('cadastro_categorias', editar=c.id) }}">Editar</a>
+    </div>
+  </article>
+  {% endfor %}
+</div>
+
+{% endblock %}

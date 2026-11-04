@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block titulo %}Comanda {{ d.comanda.identificacao }}{% endblock %}
+{% block conteudo %}
+{% set c = d.comanda %}
+{% set aberta = c.status == 'aberta' %}
+
+<div class="titulo-linha">
+  <div>
+    <h1>{{ c.identificacao }}</h1>
+    <p class="detalhe">{% if c.mesa %}Mesa {{ c.mesa }} · {% endif %}aberta às {{ c.aberta_em[11:16] }}
+      {% if not aberta %}· <strong>{{ c.status }}</strong>{% endif %}</p>
+  </div>
+  <a class="botao botao-leve" href="{{ url_for('comandas') }}">← Comandas</a>
+</div>
+
+<section aria-label="Itens da comanda">
+  <h2>Itens</h2>
+  {% if not d.itens %}<p class="vazio">Nenhum item ainda.</p>{% endif %}
+  <ul class="itens-pedido">
+    {% for i in d.itens %}
+    <li class="pedido pedido-{{ i.status }}">
+      <div class="pedido-topo">
+        <strong>{{ i.quantidade }}× {{ i.produto }}</strong>
+        <span class="selo {{ {'pedido': 'selo-baixo', 'entregue': 'selo-ok', 'cancelado': 'selo-inativo'}[i.status] }}">
+          {{ {'pedido': 'A entregar', 'entregue': 'Entregue', 'cancelado': 'Cancelado'}[i.status] }}</span>
+        <span class="valor">{{ (i.quantidade * i.preco_unitario)|moeda }}</span>
+      </div>
+      {% if i.escolhas or i.observacao %}
+      <div class="detalhe">{% if i.escolhas %}{{ i.escolhas }}{% endif %}{% if i.escolhas and i.observacao %} · {% endif %}{% if i.observacao %}<em>{{ i.observacao }}</em>{% endif %}</div>
+      {% endif %}
+      {% if i.status == 'cancelado' and i.motivo_cancelamento %}<div class="detalhe">Motivo: {{ i.motivo_cancelamento }}</div>{% endif %}
+      {% if aberta and i.status != 'cancelado' %}
+      <div class="acoes-pedido">
+        {% if i.status == 'pedido' %}
+        <form method="post" action="{{ url_for('item_entregar', item_id=i.id) }}">
+          <input type="hidden" name="voltar" value="{{ request.path }}">
+          <button class="botao botao-entregue" type="submit">ITEM ENTREGUE</button>
+        </form>
+        {% endif %}
+        <form method="post" action="{{ url_for('item_cancelar', item_id=i.id) }}" class="form-cancelar">
+          <input type="hidden" name="voltar" value="{{ request.path }}">
+          {% if i.status == 'entregue' %}
+            <label class="so-leitor" for="motivo-{{ i.id }}">Motivo</label>
+            <input type="text" id="motivo-{{ i.id }}" name="motivo" placeholder="Motivo do cancelamento" required>
+          {% endif %}
+          <button class="botao botao-leve botao-pequeno" type="submit">Cancelar item</button>
+        </form>
+      </div>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  <p class="total-linha">Total: <strong>{{ d.total|moeda }}</strong></p>
+</section>
+
+{% if aberta %}
+<div class="acoes-comanda">
+  <form method="post" action="{{ url_for('comanda_fechar', comanda_id=c.id) }}">
+    <button class="botao" type="submit">Fechar comanda</button>
+  </form>
+  <form method="post" action="{{ url_for('comanda_cancelar', comanda_id=c.id) }}">
+    <button class="botao botao-leve" type="submit">Cancelar comanda</button>
+  </form>
+</div>
+
+<section id="produtos" aria-label="Adicionar produtos">
+  <h2>Adicionar produto</h2>
+  <div class="itens">
+    {% for p in produtos %}
+    <form method="post" action="{{ url_for('comanda_item_novo', comanda_id=c.id) }}" class="item item-add">
+      <input type="hidden" name="produto_id" value="{{ p.id }}">
+      <div class="item-topo">
+        <h3>{{ p.nome }}</h3>
+        <span class="item-cat">{{ p.categoria }}</span>
+      </div>
+      <p class="preco">{{ p.preco_vigente|moeda }}
+        {% if p.origem_preco == 'promocao' %}<span class="selo selo-baixo">Promoção</span>{% endif %}</p>
+      {% for grupo, opcoes in p.opcoes.items() %}
+      <div class="campo">
+        <label for="e-{{ p.id }}-{{ loop.index }}">Escolha: {{ grupo }}</label>
+        <select id="e-{{ p.id }}-{{ loop.index }}" name="escolha_{{ grupo }}" required>
+          <option value="">Selecione…</option>
+          {% for o in opcoes %}<option value="{{ o.insumo_id }}">{{ o.insumo }}</option>{% endfor %}
+        </select>
+      </div>
+      {% endfor %}
+      <div class="linha">
+        <div class="campo campo-curto">
+          <label for="q-{{ p.id }}">Qtd.</label>
+          <input type="text" id="q-{{ p.id }}" name="quantidade" value="1" inputmode="numeric" pattern="[0-9]*" required>
+        </div>
+        <div class="campo">
+          <label for="o-{{ p.id }}">Observação <span class="opc">(opcional)</span></label>
+          <input type="text" id="o-{{ p.id }}" name="observacao" autocomplete="off">
+        </div>
+      </div>
+      <button class="botao" type="submit">Adicionar</button>
+    </form>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+{% endblock %}

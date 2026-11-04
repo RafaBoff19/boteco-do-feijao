@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block titulo %}Comandas{% endblock %}
+{% block conteudo %}
+
+<div class="titulo-linha"><h1>Comandas</h1></div>
+
+<form method="post" class="form form-larga">
+  <h2>Abrir comanda</h2>
+  <div class="linha">
+    <div class="campo">
+      <label for="identificacao">Nome do cliente ou identificação</label>
+      <input type="text" id="identificacao" name="identificacao" required autocomplete="off" placeholder="Ex.: João">
+    </div>
+    <div class="campo campo-curto">
+      <label for="mesa">Mesa <span class="opc">(opcional)</span></label>
+      <input type="text" id="mesa" name="mesa" inputmode="numeric" pattern="[0-9]*" autocomplete="off">
+    </div>
+  </div>
+  <button class="botao" type="submit">Abrir comanda</button>
+</form>
+
+<p class="filtro-linha">
+  <a href="{{ url_for('comandas', ver=('todas' if ver == 'abertas' else 'abertas')) }}">{{ 'Ver também as fechadas' if ver == 'abertas' else 'Ver só as abertas' }}</a>
+</p>
+
+{% if not lista %}<p class="vazio">Nenhuma comanda {{ 'aberta' if ver == 'abertas' }}.</p>{% endif %}
+
+<div class="cards">
+  {% for c in lista %}
+  <a class="card card-link {{ 'card-baixo' if c.pendentes }} {{ 'card-fechada' if c.status != 'aberta' }}" href="{{ url_for('comanda', comanda_id=c.id) }}">
+    <div class="card-topo">
+      <h3>{{ c.identificacao }}</h3>
+      {% if c.status != 'aberta' %}<span class="selo selo-inativo">{{ c.status|capitalize }}</span>
+      {% elif c.pendentes %}<span class="selo selo-baixo">{{ c.pendentes }} a entregar</span>{% endif %}
+    </div>
+    <p class="detalhe">{% if c.mesa %}Mesa {{ c.mesa }} · {% endif %}aberta {{ c.aberta_em[11:16] }} por {{ c.aberta_por_nome }}</p>
+    <p class="total">{{ c.total|moeda }}</p>
+  </a>
+  {% endfor %}
+</div>
+{% endblock %}

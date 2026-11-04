@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block titulo %}Histórico{% endblock %}
+{% block conteudo %}
+
+<div class="titulo-linha">
+  <h1>Histórico</h1>
+  <form method="get" class="filtro">
+    <label for="f-insumo" class="so-leitor">Filtrar por insumo</label>
+    <select id="f-insumo" name="insumo" onchange="this.form.submit()">
+      <option value="">Todos os insumos</option>
+      {% for i in insumos %}<option value="{{ i.id }}" {{ 'selected' if filtro == i.id }}>{{ i.nome }}</option>{% endfor %}
+    </select>
+  </form>
+</div>
+
+{% if not linhas %}
+  <p class="vazio">Nenhuma movimentação ainda.</p>
+{% endif %}
+
+<ul class="lista-hist">
+  {% for m in linhas %}
+  <li class="hist">
+    <div class="hist-topo">
+      <span class="selo selo-tipo">{{ m.tipo|tipo_nome }}</span>
+      <strong>{{ m.insumo }}</strong>
+      <span class="qtd {{ 'neg' if m.quantidade < 0 else 'pos' }}">{{ '+' if m.quantidade > 0 }}{{ m.quantidade|br }} {{ m.unidade }}</span>
+    </div>
+    <div class="hist-baixo">
+      {{ m.setor }} · {{ m.criado_em }} · {{ m.usuario }}
+      {% if m.fornecedor %}· {{ m.fornecedor }}{% endif %}
+      {% if m.motivo %}<br><em>{{ m.motivo }}</em>{% endif %}
+    </div>
+  </li>
+  {% endfor %}
+</ul>
+
+{% endblock %}

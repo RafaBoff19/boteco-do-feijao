@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block titulo %}{{ 'Editar insumo' if insumo else 'Novo insumo' }}{% endblock %}
+{% block conteudo %}
+
+<h1>{{ 'Editar insumo' if insumo else 'Novo insumo' }}</h1>
+{% include "_abas_cadastros.html" %}
+
+<form method="post" class="form" novalidate>
+
+  <div class="campo">
+    <label for="nome">Nome</label>
+    <input id="nome" name="nome" type="text" autocomplete="off" value="{{ form.get('nome', '') }}" placeholder="ex.: Limão">
+  </div>
+
+  <div class="campo">
+    <label for="categoria">Categoria</label>
+    <select id="categoria" name="categoria">
+      <option value="">Sem categoria</option>
+      {% for c in categorias %}<option value="{{ c.id }}" {{ 'selected' if form.get('categoria') == c.id|string }}>{{ c.nome }}</option>{% endfor %}
+    </select>
+  </div>
+
+  <div class="linha">
+    <div class="campo">
+      <label for="unidade_consumo">Como o sistema conta</label>
+      <select id="unidade_consumo" {% if travado %}disabled{% else %}name="unidade_consumo"{% endif %}>
+        {% for u, nome in [('ml', 'ml (líquidos)'), ('g', 'g (peso)'), ('un', 'un (unidades)')] %}
+        <option value="{{ u }}" {{ 'selected' if form.get('unidade_consumo') == u }}>{{ nome }}</option>
+        {% endfor %}
+      </select>
+      {% if travado %}
+        <input type="hidden" name="unidade_consumo" value="{{ form.get('unidade_consumo') }}">
+        <p class="dica">Travada: este insumo já tem movimentações ou receitas.</p>
+      {% endif %}
+    </div>
+    <div class="campo">
+      <label for="unidade_compra">Como você compra</label>
+      <input id="unidade_compra" name="unidade_compra" type="text" list="lista-compra" autocomplete="off"
+             value="{{ form.get('unidade_compra', '') }}" placeholder="ex.: fardo">
+      <datalist id="lista-compra">
+        {% for u in ['caixa', 'fardo', 'saco', 'garrafa', 'litro', 'kg', 'pacote', 'bandeja', 'barril', 'maço', 'un'] %}<option value="{{ u }}">{% endfor %}
+      </datalist>
+    </div>
+  </div>
+
+  <div class="campo">
+    <label for="fator_compra" id="rotulo-fator">Quantos cabem em 1 unidade de compra?</label>
+    <input id="fator_compra" name="fator_compra" type="text" inputmode="decimal" autocomplete="off"
+           value="{{ form.get('fator_compra', '1') }}">
+    <p class="dica">Exemplos: fardo com 12 garrafas = 12 · litro de cachaça = 1000 (ml) · saco de gelo de 5 kg = 5000 (g).</p>
+  </div>
+
+  <div class="linha">
+    <div class="campo">
+      <label for="estoque_minimo">Estoque mínimo <span class="opc">(opcional)</span></label>
+      <input id="estoque_minimo" name="estoque_minimo" type="text" inputmode="decimal" autocomplete="off"
+             value="{{ form.get('estoque_minimo', '') }}" placeholder="em branco = usa o da categoria">
+    </div>
+    <div class="campo">
+      <label for="unidade_minimo">Medida do mínimo</label>
+      <select id="unidade_minimo" name="unidade_minimo">
+        <option value="consumo" {{ 'selected' if form.get('unidade_minimo', 'consumo') == 'consumo' }}>Em consumo</option>
+        <option value="compra"  {{ 'selected' if form.get('unidade_minimo') == 'compra' }}>Em unidade de compra</option>
+      </select>
+    </div>
+  </div>
+
+  <fieldset class="checks">
+    <legend>Fornecedores <span class="opc">(opcional)</span></legend>
+    {% for f in fornecedores %}
+    <label class="check"><input type="checkbox" name="fornecedores" value="{{ f.id }}" {{ 'checked' if f.id|string in marcados }}> {{ f.nome }}</label>
+    {% else %}
+    <p class="dica">Nenhum fornecedor cadastrado ainda. Cadastre na aba Fornecedores.</p>
+    {% endfor %}
+  </fieldset>
+
+  {% if not insumo %}<p class="dica">O insumo nasce com saldo zero. Depois, registre a entrada em Movimentar.</p>{% endif %}
+
+  <button type="submit" class="botao botao-grande">{{ 'Salvar alterações' if insumo else 'Cadastrar insumo' }}</button>
+  <p class="voltar"><a href="{{ url_for('cadastro_insumos') }}">Cancelar e voltar</a></p>
+</form>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const uc = document.getElementById('unidade_consumo');
+  const compra = document.getElementById('unidade_compra');
+  const minimo = document.getElementById('unidade_minimo');
+  function atualizar() {
+    const u = uc.value, c = compra.value.trim() || 'unidade de compra';
+    document.getElementById('rotulo-fator').textContent = 'Quantos ' + u + ' cabem em 1 ' + c + '?';
+    minimo.options[0].textContent = 'Em ' + u + ' (consumo)';
+    minimo.options[1].textContent = 'Em ' + c + '(s)';
+  }
+  uc.addEventListener('change', atualizar);
+  compra.addEventListener('input', atualizar);
+  atualizar();
+})();
+</script>
+{% endblock %}

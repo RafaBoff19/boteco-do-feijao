@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block titulo %}Estoque{% endblock %} · Buteco do Feijão</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header class="topo">
+    <div class="topo-in">
+      <a class="marca" href="{{ url_for('estoque') }}">Buteco do Feijão</a>
+      <nav>
+        <a href="{{ url_for('estoque') }}"    class="{{ 'ativo' if request.endpoint == 'estoque' }}">Estoque</a>
+        <a href="{{ url_for('comandas') }}"   class="{{ 'ativo' if request.endpoint in ('comandas', 'comanda') }}">Comandas</a>
+        <a href="{{ url_for('entregas') }}"   class="{{ 'ativo' if request.endpoint == 'entregas' }}">Entregas</a>
+        <a href="{{ url_for('movimentar') }}" class="{{ 'ativo' if request.endpoint == 'movimentar' }}">Movimentar</a>
+        <a href="{{ url_for('historico') }}"  class="{{ 'ativo' if request.endpoint == 'historico' }}">Histórico</a>
+        <a href="{{ url_for('cadastros_inicio') }}" class="{{ 'ativo' if request.endpoint and request.endpoint.startswith('cadastro') }}">Cadastros</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="conteudo">
+    {% with mensagens = get_flashed_messages(with_categories=true) %}
+      {% for categoria, texto in mensagens %}
+        <div class="msg msg-{{ categoria }}" role="{{ 'alert' if categoria != 'ok' else 'status' }}">{{ texto }}</div>
+      {% endfor %}
+    {% endwith %}
+    {% block conteudo %}{% endblock %}
+  </main>
+
+  <footer class="rodape">Modo provisório: sem login, as operações ficam em nome do Administrador.</footer>
+  {% block scripts %}{% endblock %}
+</body>
+</html>
