@@ -1,0 +1,4 @@
+<div class="abas" role="tablist">
+  <a href="{{ url_for('usuarios') }}" class="{{ 'ativa' if request.endpoint in ('usuarios', 'usuario_editar') }}">Equipe</a>
+  <a href="{{ url_for('perfis') }}"   class="{{ 'ativa' if request.endpoint == 'perfis' }}">Perfis e permissões</a>
+</div>

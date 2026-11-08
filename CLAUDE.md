@@ -7,14 +7,14 @@ Projeto de TCC de um amigo do Rafa (pode virar produto real). Controle de estoqu
 python -m pip install flask reportlab
 python bd.py            # cria estoque.db com dados fictícios (python bd.py --recriar apaga e recria)
 python app.py           # http://localhost:5000 (também acessível pelo IP do PC na rede local)
-python teste_regras.py; python teste_cadastros.py; python teste_produtos.py; python teste_pedidos.py
+python teste_regras.py; python teste_cadastros.py; python teste_produtos.py; python teste_pedidos.py; python teste_login.py
 ```
 Os testes usam banco em memória e não mexem no `estoque.db`. Todos devem terminar em "TUDO CERTO". Rode-os depois de qualquer mudança em regras.
 
 ## Arquitetura
 - Servidor Flask local no PC do bar + SQLite. Tablets e celulares acessam pelo IP do PC no mesmo Wi-Fi, sem internet. **Não expor à internet antes de existir login.**
 - `banco/schema.sql` (estrutura), `banco/seed.sql` (dados fictícios), `banco/migracoes/NNN_nome.sql` (alterações novas; `bd.aplicar_migracoes` aplica sozinho, controlado por `PRAGMA user_version`). Mudança de estrutura nova = nova migração, nunca editar o schema de um banco já em uso.
-- `regras.py` (estoque, alertas), `cadastros.py` (insumos, produtos, receitas, promoções), `pedidos.py` (comandas, itens, entrega), `app.py` + `templates/` + `static/style.css` (interface).
+- `regras.py` (estoque, alertas), `auth.py` (login, senhas, usuários, permissões), `cadastros.py` (insumos, produtos, receitas, promoções), `pedidos.py` (comandas, itens, entrega), `app.py` + `templates/` + `static/style.css` (interface).
 - Interface responsiva (PC, tablet, Galaxy A11 ~390 px). Sem lateral scroll; botões grandes para toque.
 
 ## Regras de negócio (não quebrar)
@@ -29,10 +29,10 @@ Os testes usam banco em memória e não mexem no `estoque.db`. Todos devem termi
 
 ## Estado atual
 Pronto: estoque por setor (Bar/Estoque), movimentações, histórico, alertas, cadastros (insumos, fornecedores, categorias, produtos com receita, promoções), comandas, pedidos e ITEM ENTREGUE.
-**Sem login ainda**: tudo roda como `USUARIO_PROVISORIO = 1` (Administrador). As tabelas perfil, permissao, perfil_permissao e usuario já existem.
+Login e perfis (Passo 8, migração 003): senha com hash (werkzeug), primeiro acesso cria o Dono (reaproveita o `admin` do seed), usuário novo entra com senha provisória e troca, bloqueio após 5 erros (em memória), sessão de 16 h. Cada rota usa `@requer("permissao", ...)` (basta uma); o menu e os botões usam `pode(...)`. O Dono sempre tem todas as permissões; só o Dono edita permissões de perfil e mexe em usuários Dono; sempre resta um Dono ativo. `pedido.estornar` (novo) controla cancelar item já entregue. `chave_secreta.txt` (gerada sozinha, fora do git) assina o cookie.
 
-## Próximo passo: login e perfis (Passo 8)
-Perfis: Dono, Gerente, Caixa, Bartender, Garçom, com permissões configuráveis. Depois: pedidos por QR Code, comunicação Bar↔Estoque, compras com aprovação (gerente pede, dono aprova), executável (.exe com PyInstaller). Fora do escopo inicial: maquininha de cartão, impressora, comanda compartilhada por mesa.
+## Próximo passo
+Pedidos por QR Code, comunicação Bar↔Estoque, compras com aprovação (gerente pede, dono aprova), executável (.exe com PyInstaller). Fora do escopo inicial: maquininha de cartão, impressora, comanda compartilhada por mesa.
 
 ## Pontos em aberto (confirmar com o dono do bar)
 - Dose do drink: 100 ml (spec) ou 150 ml (exemplo do documento)? Kit é 150 ml.
@@ -41,6 +41,7 @@ Perfis: Dono, Gerente, Caixa, Bartender, Garçom, com permissões configuráveis
 - Baixa tirando primeiro do Bar e depois do Estoque é suposição minha.
 - QR Code do cliente exigiria Wi-Fi do bar ou um serviço na nuvem.
 - Papel do Caixa sem maquininha; estabilidade da internet; estoque real inicial.
+- Senha mínima de 4 caracteres (permite PIN no tablet): o dono aceita? Permissões padrão de cada perfil (Caixa e Gerente estornam item entregue).
 
 ## Convenções
 - Textos de tela e mensagens de erro em português. Erros de uso viram `ErroDeRegra` (a tela mostra a mensagem); nada é gravado parcialmente (transação).

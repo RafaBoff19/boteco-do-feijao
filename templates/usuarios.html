@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block titulo %}Usuários{% endblock %}
+{% block conteudo %}
+
+<h1>Usuários</h1>
+{% include "_abas_usuarios.html" %}
+
+<form method="post" class="form form-largo" novalidate>
+  <h2>Novo usuário</h2>
+  <div class="linha">
+    <div class="campo">
+      <label for="nome">Nome</label>
+      <input id="nome" name="nome" type="text" autocomplete="off" value="{{ form.get('nome', '') }}" placeholder="ex.: Maria Souza">
+    </div>
+    <div class="campo">
+      <label for="login">Usuário <span class="opc">(para entrar)</span></label>
+      <input id="login" name="login" type="text" value="{{ form.get('login', '') }}" placeholder="ex.: maria"
+             autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false">
+    </div>
+  </div>
+  <div class="linha">
+    <div class="campo">
+      <label for="perfil_id">Perfil</label>
+      <select id="perfil_id" name="perfil_id">
+        <option value="">Escolha...</option>
+        {% for p in perfis %}<option value="{{ p.id }}" {{ 'selected' if form.get('perfil_id') == p.id|string }}>{{ p.nome }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="campo">
+      <label for="senha">Senha provisória <span class="opc">(mín. {{ minimo }})</span></label>
+      <input id="senha" name="senha" type="text" autocomplete="off" autocapitalize="none" spellcheck="false">
+    </div>
+  </div>
+  <p class="dica">Passe a senha provisória para a pessoa. No primeiro login ela cria uma senha só dela.</p>
+  <button type="submit" class="botao">Cadastrar usuário</button>
+</form>
+
+<div class="itens">
+  {% for u in lista %}
+  <article class="item {{ 'inativo' if not u.ativo }}">
+    <div class="item-topo">
+      <h3>{{ u.nome }}</h3>
+      {% if not u.ativo %}<span class="selo selo-inativo">Inativo</span>
+      {% elif u.sem_senha %}<span class="selo selo-baixo">Sem senha</span>
+      {% elif u.trocar_senha %}<span class="selo selo-baixo">Senha provisória</span>{% endif %}
+      <span class="item-cat">{{ u.perfil }}</span>
+    </div>
+    <p class="detalhe">usuário <strong>{{ u.login }}</strong> ·
+      {{ 'último acesso ' ~ u.ultimo_acesso[8:10] ~ '/' ~ u.ultimo_acesso[5:7] ~ ' ' ~ u.ultimo_acesso[11:16] if u.ultimo_acesso else 'nunca entrou' }}
+      {% if u.id == usuario.id %}· <strong>você</strong>{% endif %}</p>
+    <div class="acoes">
+      <a class="botao botao-leve botao-pequeno" href="{{ url_for('usuario_editar', usuario_id=u.id) }}">Editar</a>
+    </div>
+  </article>
+  {% endfor %}
+</div>
+
+{% endblock %}

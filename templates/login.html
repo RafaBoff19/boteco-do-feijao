@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block titulo %}Entrar{% endblock %}
+{% block conteudo %}
+<form method="post" class="form form-login" novalidate>
+  <h1>Entrar</h1>
+  <input type="hidden" name="proximo" value="{{ proximo }}">
+  <div class="campo">
+    <label for="login">Usuário</label>
+    <input id="login" name="login" type="text" value="{{ login_digitado }}" required
+           autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" {{ 'autofocus' if not login_digitado }}>
+  </div>
+  <div class="campo">
+    <label for="senha">Senha</label>
+    <input id="senha" name="senha" type="password" required autocomplete="current-password" {{ 'autofocus' if login_digitado }}>
+  </div>
+  <button type="submit" class="botao botao-grande">Entrar</button>
+  <p class="dica">Esqueceu a senha? Peça ao Dono ou ao Gerente para definir uma provisória.</p>
+</form>
+{% endblock %}

@@ -14,3 +14,6 @@ venv/
 .idea/
 .DS_Store
 Thumbs.db
+
+# chave que assina o cookie de login (gerada sozinha; cada instalação tem a sua)
+chave_secreta.txt

@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block titulo %}Minha conta{% endblock %}
+{% block conteudo %}
+<h1>Minha conta</h1>
+<p class="detalhe">{{ usuario.nome }} · usuário <strong>{{ usuario.login }}</strong> · perfil {{ usuario.perfil }}</p>
+
+<form method="post" class="form" novalidate>
+  <h2>{{ 'Crie a sua senha' if usuario.trocar_senha else 'Trocar senha' }}</h2>
+  {% if usuario.trocar_senha %}
+  <p class="dica">Você entrou com uma senha provisória. Crie uma só sua para continuar.</p>
+  {% endif %}
+  <div class="campo">
+    <label for="senha_atual">{{ 'Senha provisória' if usuario.trocar_senha else 'Senha atual' }}</label>
+    <input id="senha_atual" name="senha_atual" type="password" required autocomplete="current-password" autofocus>
+  </div>
+  <div class="campo">
+    <label for="senha">Nova senha</label>
+    <input id="senha" name="senha" type="password" required autocomplete="new-password">
+  </div>
+  <div class="campo">
+    <label for="confirmacao">Repita a nova senha</label>
+    <input id="confirmacao" name="confirmacao" type="password" required autocomplete="new-password">
+  </div>
+  <button type="submit" class="botao botao-grande">Salvar senha</button>
+</form>
+{% endblock %}

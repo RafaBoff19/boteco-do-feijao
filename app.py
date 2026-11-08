@@ -7,11 +7,15 @@ Abre:  http://localhost:5000   (no próprio PC)
 Funciona sem internet: só precisa que os aparelhos estejam na mesma rede do bar.
 """
 import re
+import secrets
 import socket
 import sqlite3
+from datetime import timedelta
+from functools import wraps
 
-from flask import Flask, abort, flash, g, redirect, render_template, request, url_for
+from flask import Flask, abort, flash, g, redirect, render_template, request, session, url_for
 
+import auth
 import bd
 import cadastros
 import pedidos
@@ -19,10 +23,24 @@ import regras
 from regras import ErroDeRegra
 
 app = Flask(__name__)
-app.secret_key = "trocar-quando-tiver-login"   # exigida pelo flash(); trocar quando houver login
 
-# Enquanto não existe login, todas as operações ficam em nome do usuário 1 (Administrador).
-USUARIO_PROVISORIO = 1
+
+def _chave_secreta():
+    """A chave que "assina" o cookie de login. Se alguém souber a chave, consegue se passar
+    por qualquer usuário; por isso ela é sorteada na primeira vez e guardada num arquivo
+    fora do git (chave_secreta.txt). Guardar em arquivo faz o login sobreviver a reinícios."""
+    arquivo = bd.PASTA / "chave_secreta.txt"
+    if not arquivo.exists():
+        arquivo.write_text(secrets.token_hex(32), encoding="utf-8")
+    return arquivo.read_text(encoding="utf-8").strip()
+
+
+app.secret_key = _chave_secreta()
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,        # o JavaScript da página não lê o cookie
+    SESSION_COOKIE_SAMESITE="Lax",       # outro site não consegue enviar formulários "em nome" do usuário
+    PERMANENT_SESSION_LIFETIME=timedelta(hours=16),   # um turno inteiro (18h–03h) com folga
+)
 
 TIPOS = {
     "entrada": "Entrada",
@@ -50,6 +68,87 @@ def fechar_conexao(_erro):
     c = g.pop("con", None)
     if c is not None:
         c.close()
+
+
+# ---------------------------------------------------------------------
+# Login: quem está usando o sistema e o que pode fazer
+# ---------------------------------------------------------------------
+
+# páginas que abrem sem estar logado
+PAGINAS_PUBLICAS = {"login", "primeiro_acesso", "static"}
+# páginas liberadas para quem precisa trocar a senha antes de continuar
+PAGINAS_TROCA_SENHA = {"minha_conta", "logout", "static"}
+
+
+def uid():
+    """Id do usuário logado (é ele que fica registrado nas movimentações e pedidos)."""
+    return g.usuario["id"]
+
+
+def pode(*codigos):
+    """Usado no Python e nos templates: o usuário logado tem alguma destas permissões?"""
+    return auth.tem_permissao(g.get("usuario"), *codigos)
+
+
+def requer(*codigos):
+    """Decorador: a tela só abre para quem tem pelo menos uma das permissões."""
+    def decorador(funcao):
+        @wraps(funcao)
+        def envelope(*args, **kwargs):
+            if not pode(*codigos):
+                abort(403)
+            return funcao(*args, **kwargs)
+        return envelope
+    return decorador
+
+
+def pagina_inicial():
+    """Primeira tela que o perfil pode ver (o Garçom, por exemplo, não vê o estoque)."""
+    for permissoes, tela in [(("estoque.ver",), "estoque"),
+                             (("pedido.registrar", "caixa.operar"), "comandas"),
+                             (("pedido.entregar",), "entregas"),
+                             (("produto.gerir", "fornecedor.gerir"), "cadastros_inicio"),
+                             (("usuario.gerir",), "usuarios")]:
+        if pode(*permissoes):
+            return url_for(tela)
+    return url_for("minha_conta")
+
+
+@app.before_request
+def conferir_login():
+    g.usuario = None
+    if request.endpoint in PAGINAS_PUBLICAS:
+        return None
+    c = con()
+    if auth.precisa_primeiro_acesso(c):
+        return redirect(url_for("primeiro_acesso"))
+    g.usuario = auth.carregar_usuario(c, session.get("usuario_id"))
+    if g.usuario is None:                 # não logou, ou foi desativado enquanto usava
+        session.clear()
+        destino = request.full_path if request.method == "GET" else None
+        return redirect(url_for("login", proximo=destino))
+    if g.usuario["trocar_senha"] and request.endpoint not in PAGINAS_TROCA_SENHA:
+        flash("Crie uma senha nova para continuar.", "aviso")
+        return redirect(url_for("minha_conta"))
+    return None
+
+
+@app.context_processor
+def para_os_templates():
+    return {"usuario": g.get("usuario"), "pode": pode}
+
+
+@app.errorhandler(403)
+def sem_permissao(_erro):
+    return render_template("sem_permissao.html", inicio=pagina_inicial()), 403
+
+
+def _destino_seguro(texto):
+    """Só aceita voltar para um caminho interno do sistema (evita redirecionar para outro site)."""
+    texto = (texto or "").strip()
+    if texto.startswith("/") and not texto.startswith("//") and "\\" not in texto:
+        return texto
+    return None
 
 
 # ---------------------------------------------------------------------
@@ -117,6 +216,8 @@ def _int_ou_none(texto):
 
 @app.route("/")
 def estoque():
+    if not pode("estoque.ver"):           # ex.: Garçom cai direto nas comandas
+        return redirect(pagina_inicial())
     c = con()
     setores = [r["nome"] for r in c.execute("SELECT nome FROM setor ORDER BY id")]
     saldos = {(r["insumo_id"], r["setor"]): r["quantidade"] for r in c.execute(
@@ -158,9 +259,10 @@ def estoque():
 
 
 @app.post("/alertas/<int:alerta_id>/lido")
+@requer("estoque.ver")
 def alerta_lido(alerta_id):
     try:
-        regras.marcar_alerta_lido(con(), alerta_id, USUARIO_PROVISORIO)
+        regras.marcar_alerta_lido(con(), alerta_id, uid())
     except ErroDeRegra as e:
         flash(str(e), "erro")
     return redirect(url_for("estoque"))
@@ -176,10 +278,18 @@ def _dados_do_formulario():
                WHERE i.ativo = 1 ORDER BY categoria, i.nome""").fetchall(),
         "setores": [r["nome"] for r in c.execute("SELECT nome FROM setor ORDER BY id")],
         "fornecedores": c.execute("SELECT id, nome FROM fornecedor WHERE ativo = 1 ORDER BY nome").fetchall(),
+        "tipos_permitidos": [t for t in ("entrada", "perda", "saida", "transferencia", "ajuste")
+                             if pode(_permissao_do_tipo(t))],
     }
 
 
+def _permissao_do_tipo(tipo):
+    """Perda tem permissão própria (o Bartender registra perda, mas não dá entrada)."""
+    return "estoque.perda" if tipo == "perda" else "estoque.movimentar"
+
+
 @app.route("/movimentar", methods=["GET", "POST"])
+@requer("estoque.movimentar", "estoque.perda")
 def movimentar():
     if request.method == "GET":
         return render_template("movimentar.html", form={}, **_dados_do_formulario())
@@ -188,6 +298,8 @@ def movimentar():
     c = con()
     try:
         tipo = f.get("tipo", "")
+        if tipo in TIPOS and not pode(_permissao_do_tipo(tipo)):
+            raise ErroDeRegra(f"Seu perfil não pode registrar {TIPOS[tipo].lower()}.")
         if not f.get("insumo"):
             raise ErroDeRegra("Escolha o insumo.")
         insumo = int(f["insumo"])
@@ -198,24 +310,24 @@ def movimentar():
         fornecedor = int(f["fornecedor"]) if f.get("fornecedor") else None
 
         if tipo == "entrada":
-            r = regras.registrar_entrada(c, insumo, quantidade, USUARIO_PROVISORIO,
+            r = regras.registrar_entrada(c, insumo, quantidade, uid(),
                                          fornecedor_id=fornecedor, setor=setor,
                                          unidade=unidade, motivo=motivo)
             sucesso = "Entrada registrada."
         elif tipo == "saida":
-            r = regras.registrar_saida(c, insumo, quantidade, USUARIO_PROVISORIO, motivo,
+            r = regras.registrar_saida(c, insumo, quantidade, uid(), motivo,
                                        setor=setor, unidade=unidade)
             sucesso = "Saída registrada."
         elif tipo == "perda":
-            r = regras.registrar_perda(c, insumo, quantidade, motivo, USUARIO_PROVISORIO,
+            r = regras.registrar_perda(c, insumo, quantidade, motivo, uid(),
                                        setor=setor, unidade=unidade)
             sucesso = "Perda registrada."
         elif tipo == "transferencia":
             r = regras.transferir(c, insumo, quantidade, setor, f.get("setor_destino"),
-                                  USUARIO_PROVISORIO, unidade=unidade)
+                                  uid(), unidade=unidade)
             sucesso = "Transferência registrada."
         elif tipo == "ajuste":
-            r = regras.ajustar_inventario(c, insumo, quantidade, USUARIO_PROVISORIO, setor=setor,
+            r = regras.ajustar_inventario(c, insumo, quantidade, uid(), setor=setor,
                                           unidade=unidade, motivo=motivo or "Contagem de inventário")
             sucesso = ("Contagem conferida: o sistema já estava correto, nada foi alterado."
                        if not r["movimentacao_ids"] else "Ajuste de inventário registrado.")
@@ -228,10 +340,11 @@ def movimentar():
     flash(sucesso, "ok")
     for aviso in r["avisos"]:
         flash(aviso, "aviso")
-    return redirect(url_for("estoque"))
+    return redirect(url_for("estoque") if pode("estoque.ver") else url_for("movimentar"))
 
 
 @app.route("/historico")
+@requer("estoque.ver")
 def historico():
     c = con()
     filtro = request.args.get("insumo", type=int)
@@ -245,11 +358,13 @@ def historico():
 # ---------------------------------------------------------------------
 
 @app.route("/cadastros")
+@requer("produto.gerir", "fornecedor.gerir")
 def cadastros_inicio():
-    return redirect(url_for("cadastro_insumos"))
+    return redirect(url_for("cadastro_insumos") if pode("produto.gerir") else url_for("cadastro_fornecedores"))
 
 
 @app.route("/cadastros/insumos")
+@requer("produto.gerir")
 def cadastro_insumos():
     inativos = request.args.get("inativos") == "1"
     return render_template("insumos.html", aba="insumos", inativos=inativos,
@@ -288,6 +403,7 @@ def _salvar_insumo_do_form(insumo_id=None):
 
 
 @app.route("/cadastros/insumos/novo", methods=["GET", "POST"])
+@requer("produto.gerir")
 def cadastro_insumo_novo():
     if request.method == "POST":
         try:
@@ -306,6 +422,7 @@ def cadastro_insumo_novo():
 
 
 @app.route("/cadastros/insumos/<int:insumo_id>", methods=["GET", "POST"])
+@requer("produto.gerir")
 def cadastro_insumo_editar(insumo_id):
     dados = cadastros.dados_insumo(con(), insumo_id)
     if dados is None:
@@ -336,6 +453,7 @@ def cadastro_insumo_editar(insumo_id):
 
 
 @app.post("/cadastros/insumos/<int:insumo_id>/ativo")
+@requer("produto.gerir")
 def cadastro_insumo_ativo(insumo_id):
     ativar = request.form.get("ativo") == "1"
     try:
@@ -347,6 +465,7 @@ def cadastro_insumo_ativo(insumo_id):
 
 
 @app.route("/cadastros/fornecedores", methods=["GET", "POST"])
+@requer("fornecedor.gerir")
 def cadastro_fornecedores():
     c = con()
     inativos = request.args.get("inativos") == "1"
@@ -372,6 +491,7 @@ def cadastro_fornecedores():
 
 
 @app.post("/cadastros/fornecedores/<int:fornecedor_id>/ativo")
+@requer("fornecedor.gerir")
 def cadastro_fornecedor_ativo(fornecedor_id):
     ativar = request.form.get("ativo") == "1"
     try:
@@ -383,6 +503,7 @@ def cadastro_fornecedor_ativo(fornecedor_id):
 
 
 @app.route("/cadastros/categorias", methods=["GET", "POST"])
+@requer("produto.gerir")
 def cadastro_categorias():
     c = con()
     form = {}
@@ -413,6 +534,7 @@ def cadastro_categorias():
 # ---------------------------------------------------------------------
 
 @app.route("/cadastros/produtos")
+@requer("produto.gerir")
 def cadastro_produtos():
     inativos = request.args.get("inativos") == "1"
     return render_template("produtos.html", aba="produtos", inativos=inativos,
@@ -463,6 +585,7 @@ def _salvar_produto_do_form(produto_id=None):
 
 
 @app.route("/cadastros/produtos/novo", methods=["GET", "POST"])
+@requer("produto.gerir")
 def cadastro_produto_novo():
     if request.method == "POST":
         try:
@@ -479,6 +602,7 @@ def cadastro_produto_novo():
 
 
 @app.route("/cadastros/produtos/<int:produto_id>", methods=["GET", "POST"])
+@requer("produto.gerir")
 def cadastro_produto_editar(produto_id):
     produto = con().execute("SELECT * FROM produto WHERE id = ?", (produto_id,)).fetchone()
     if produto is None:
@@ -500,6 +624,7 @@ def cadastro_produto_editar(produto_id):
 
 
 @app.post("/cadastros/produtos/<int:produto_id>/ativo")
+@requer("produto.gerir")
 def cadastro_produto_ativo(produto_id):
     ativar = request.form.get("ativo") == "1"
     try:
@@ -511,6 +636,7 @@ def cadastro_produto_ativo(produto_id):
 
 
 @app.route("/cadastros/produtos/<int:produto_id>/promocoes", methods=["GET", "POST"])
+@requer("produto.gerir")
 def cadastro_promocoes(produto_id):
     c = con()
     produto = c.execute("SELECT * FROM produto WHERE id = ?", (produto_id,)).fetchone()
@@ -537,6 +663,7 @@ def cadastro_promocoes(produto_id):
 
 
 @app.post("/cadastros/promocoes/<int:promocao_id>/<acao>")
+@requer("produto.gerir")
 def cadastro_promocao_acao(promocao_id, acao):
     c = con()
     linha = c.execute("SELECT produto_id FROM preco_promocao WHERE id = ?", (promocao_id,)).fetchone()
@@ -585,12 +712,15 @@ def _avisos(r):
 
 
 @app.route("/comandas", methods=["GET", "POST"])
+@requer("pedido.registrar", "caixa.operar")
 def comandas():
     c = con()
     if request.method == "POST":
+        if not pode("pedido.registrar"):
+            abort(403)
         try:
             mesa = _inteiro(request.form.get("mesa"), "Mesa")
-            cid = pedidos.abrir_comanda(c, request.form.get("identificacao"), USUARIO_PROVISORIO, mesa=mesa)
+            cid = pedidos.abrir_comanda(c, request.form.get("identificacao"), uid(), mesa=mesa)
             return redirect(url_for("comanda", comanda_id=cid))
         except ErroDeRegra as e:
             flash(str(e), "erro")
@@ -600,6 +730,7 @@ def comandas():
 
 
 @app.route("/comandas/<int:comanda_id>")
+@requer("pedido.registrar", "caixa.operar", "pedido.entregar")
 def comanda(comanda_id):
     c = con()
     dados = pedidos.dados_comanda(c, comanda_id)
@@ -615,12 +746,13 @@ def comanda(comanda_id):
 
 
 @app.post("/comandas/<int:comanda_id>/itens")
+@requer("pedido.registrar")
 def comanda_item_novo(comanda_id):
     escolhas = {k[len("escolha_"):]: v for k, v in request.form.items() if k.startswith("escolha_")}
     try:
         quantidade = _inteiro(request.form.get("quantidade"), "Quantidade") or 1
         pedidos.adicionar_item(con(), comanda_id, _inteiro(request.form.get("produto_id"), "Produto"), quantidade,
-                               USUARIO_PROVISORIO, escolhas=escolhas, observacao=request.form.get("observacao"))
+                               uid(), escolhas=escolhas, observacao=request.form.get("observacao"))
         flash("Item adicionado. O estoque só baixa quando for marcado como entregue.", "ok")
     except ErroDeRegra as e:
         flash(str(e), "erro")
@@ -628,9 +760,10 @@ def comanda_item_novo(comanda_id):
 
 
 @app.post("/itens/<int:item_id>/entregar")
+@requer("pedido.entregar")
 def item_entregar(item_id):
     try:
-        r = pedidos.entregar_item(con(), item_id, USUARIO_PROVISORIO)
+        r = pedidos.entregar_item(con(), item_id, uid())
         flash("Item entregue: ingredientes baixados do estoque.", "ok")
         _avisos(r)
     except ErroDeRegra as e:
@@ -639,9 +772,16 @@ def item_entregar(item_id):
 
 
 @app.post("/itens/<int:item_id>/cancelar")
+@requer("pedido.registrar", "pedido.entregar", "pedido.estornar")
 def item_cancelar(item_id):
     try:
-        pedidos.cancelar_item(con(), item_id, USUARIO_PROVISORIO, request.form.get("motivo"))
+        item = con().execute("SELECT status FROM pedido_item WHERE id = ?", (item_id,)).fetchone()
+        # item já entregue: cancelar devolve ingredientes ao estoque, então exige permissão própria
+        if item and item["status"] == "entregue" and not pode("pedido.estornar"):
+            raise ErroDeRegra("Este item já foi entregue: seu perfil não tem permissão para cancelá-lo.")
+        if item and item["status"] == "pedido" and not pode("pedido.registrar", "pedido.entregar"):
+            abort(403)
+        pedidos.cancelar_item(con(), item_id, uid(), request.form.get("motivo"))
         flash("Item cancelado.", "ok")
     except ErroDeRegra as e:
         flash(str(e), "erro")
@@ -649,9 +789,10 @@ def item_cancelar(item_id):
 
 
 @app.post("/comandas/<int:comanda_id>/fechar")
+@requer("caixa.operar")
 def comanda_fechar(comanda_id):
     try:
-        r = pedidos.fechar_comanda(con(), comanda_id, USUARIO_PROVISORIO)
+        r = pedidos.fechar_comanda(con(), comanda_id, uid())
         flash(f"Comanda fechada. Total: {moeda(r['total'])}.", "ok")
         return redirect(url_for("comandas"))
     except ErroDeRegra as e:
@@ -660,9 +801,10 @@ def comanda_fechar(comanda_id):
 
 
 @app.post("/comandas/<int:comanda_id>/cancelar")
+@requer("caixa.operar")
 def comanda_cancelar(comanda_id):
     try:
-        pedidos.cancelar_comanda(con(), comanda_id, USUARIO_PROVISORIO)
+        pedidos.cancelar_comanda(con(), comanda_id, uid())
         flash("Comanda cancelada.", "ok")
         return redirect(url_for("comandas"))
     except ErroDeRegra as e:
@@ -671,9 +813,141 @@ def comanda_cancelar(comanda_id):
 
 
 @app.route("/entregas")
+@requer("pedido.entregar")
 def entregas():
     return render_template("entregas.html", fila=pedidos.itens_pendentes(con()))
 
+
+# ---------------------------------------------------------------------
+# Login, conta e usuários (Passo 8)
+# ---------------------------------------------------------------------
+
+def _entrar(usuario_id):
+    session.clear()                       # descarta qualquer sessão anterior neste aparelho
+    session["usuario_id"] = usuario_id
+    session.permanent = True              # vale por PERMANENT_SESSION_LIFETIME, mesmo fechando o navegador
+
+
+@app.route("/entrar", methods=["GET", "POST"])
+def login():
+    c = con()
+    if auth.precisa_primeiro_acesso(c):
+        return redirect(url_for("primeiro_acesso"))
+    proximo = _destino_seguro(request.values.get("proximo"))
+    if request.method == "POST":
+        try:
+            _entrar(auth.autenticar(c, request.form.get("login"), request.form.get("senha")))
+            g.usuario = auth.carregar_usuario(c, session["usuario_id"])
+            return redirect(proximo or pagina_inicial())
+        except ErroDeRegra as e:
+            flash(str(e), "erro")
+    return render_template("login.html", login_digitado=request.form.get("login", ""), proximo=proximo or "")
+
+
+@app.post("/sair")
+def logout():
+    session.clear()
+    flash("Você saiu do sistema.", "ok")
+    return redirect(url_for("login"))
+
+
+@app.route("/primeiro-acesso", methods=["GET", "POST"])
+def primeiro_acesso():
+    c = con()
+    if not auth.precisa_primeiro_acesso(c):
+        return redirect(url_for("login"))
+    f = request.form
+    if request.method == "POST":
+        try:
+            _entrar(auth.configurar_primeiro_acesso(c, f.get("nome"), f.get("login"),
+                                                    f.get("senha"), f.get("confirmacao")))
+            flash("Pronto! Você é o Dono do sistema. Agora cadastre a equipe em Usuários.", "ok")
+            return redirect(url_for("usuarios"))
+        except ErroDeRegra as e:
+            flash(str(e), "erro")
+    return render_template("primeiro_acesso.html", form=f)
+
+
+@app.route("/minha-conta", methods=["GET", "POST"])
+def minha_conta():
+    if request.method == "POST":
+        f = request.form
+        try:
+            auth.trocar_propria_senha(con(), uid(), f.get("senha_atual"), f.get("senha"), f.get("confirmacao"))
+            flash("Senha alterada.", "ok")
+            g.usuario = auth.carregar_usuario(con(), uid())
+            return redirect(pagina_inicial())
+        except ErroDeRegra as e:
+            flash(str(e), "erro")
+    return render_template("conta.html")
+
+
+def _perfis_que_posso_dar():
+    """Quem não é Dono não vê a opção 'Dono' (não pode criar nem promover um Dono)."""
+    perfis = con().execute("SELECT id, nome FROM perfil ORDER BY id").fetchall()
+    if g.usuario["perfil"] == auth.PERFIL_DONO:
+        return perfis
+    return [p for p in perfis if p["nome"] != auth.PERFIL_DONO]
+
+
+@app.route("/usuarios", methods=["GET", "POST"])
+@requer("usuario.gerir")
+def usuarios():
+    c = con()
+    f = request.form
+    if request.method == "POST":
+        try:
+            auth.criar_usuario(c, f.get("nome"), f.get("login"), f.get("senha"),
+                               _inteiro(f.get("perfil_id"), "Perfil"), g.usuario)
+            flash(f"Usuário criado. Na primeira vez que entrar, {f.get('nome').strip()} vai criar a própria senha.", "ok")
+            return redirect(url_for("usuarios"))
+        except ErroDeRegra as e:
+            flash(str(e), "erro")
+    return render_template("usuarios.html", lista=auth.listar_usuarios(c), perfis=_perfis_que_posso_dar(),
+                           form=f, minimo=auth.TAMANHO_MINIMO_SENHA)
+
+
+@app.route("/usuarios/<int:usuario_id>", methods=["GET", "POST"])
+@requer("usuario.gerir")
+def usuario_editar(usuario_id):
+    c = con()
+    alvo = auth.buscar_usuario(c, usuario_id)
+    if alvo is None:
+        abort(404)
+    f = request.form
+    if request.method == "POST":
+        try:
+            if f.get("acao") == "senha":
+                auth.redefinir_senha(c, usuario_id, f.get("senha"), g.usuario)
+                flash("Senha provisória definida. A pessoa vai criar uma nova no próximo login.", "ok")
+            else:
+                auth.editar_usuario(c, usuario_id, f.get("nome"), _inteiro(f.get("perfil_id"), "Perfil"),
+                                    f.get("ativo") == "1", g.usuario)
+                flash("Usuário atualizado.", "ok")
+            return redirect(url_for("usuarios"))
+        except ErroDeRegra as e:
+            flash(str(e), "erro")
+    perfis = _perfis_que_posso_dar()
+    if alvo["perfil"] == auth.PERFIL_DONO and g.usuario["perfil"] != auth.PERFIL_DONO:
+        flash("Só o Dono pode alterar usuários com perfil Dono.", "aviso")
+    return render_template("usuario_form.html", alvo=alvo, perfis=perfis, minimo=auth.TAMANHO_MINIMO_SENHA,
+                           eu_mesmo=(usuario_id == uid()))
+
+
+@app.route("/perfis", methods=["GET", "POST"])
+@requer("usuario.gerir")
+def perfis():
+    c = con()
+    if request.method == "POST":
+        try:
+            perfil_id = _inteiro(request.form.get("perfil_id"), "Perfil")
+            auth.definir_permissoes_perfil(c, perfil_id, request.form.getlist("permissao"), g.usuario)
+            flash("Permissões salvas. Valem a partir da próxima tela que a equipe abrir.", "ok")
+            return redirect(url_for("perfis"))
+        except ErroDeRegra as e:
+            flash(str(e), "erro")
+    return render_template("perfis.html", perfis=auth.listar_perfis(c), permissoes=auth.listar_permissoes(c),
+                           sou_dono=(g.usuario["perfil"] == auth.PERFIL_DONO))
 
 
 def ip_local():

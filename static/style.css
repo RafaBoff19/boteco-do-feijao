@@ -82,9 +82,9 @@ nav a.ativo { background: var(--marca-fundo); color: var(--marca); }
 .linha .campo { min-width: 180px; }
 label, legend { font-weight: 700; font-size: .92rem; display: block; margin-bottom: .3rem; }
 .opc { font-weight: 400; color: var(--suave); }
-input[type=text], select { width: 100%; font: inherit; padding: .7rem .8rem; min-height: 48px; border-radius: 10px;
+input[type=text], input[type=password], select { width: 100%; font: inherit; padding: .7rem .8rem; min-height: 48px; border-radius: 10px;
                            border: 1px solid var(--borda); background: var(--bg); color: var(--texto); }
-input[type=text]:focus, select:focus, .tipo input:focus-visible + span, .botao:focus-visible, nav a:focus-visible { outline: 3px solid var(--marca); outline-offset: 2px; }
+input[type=text]:focus, input[type=password]:focus, select:focus, .tipo input:focus-visible + span, .botao:focus-visible, nav a:focus-visible { outline: 3px solid var(--marca); outline-offset: 2px; }
 
 .tipos { border: 0; padding: 0; margin: 0 0 1rem; display: flex; flex-wrap: wrap; gap: .5rem; }
 .tipos legend { width: 100%; }
@@ -130,7 +130,7 @@ input[type=text]:focus, select:focus, .tipo input:focus-visible + span, .botao:f
 .checks { border: 1px solid var(--borda); border-radius: 10px; padding: .6rem .9rem; margin: 0 0 1rem; }
 .checks legend { padding: 0 .3rem; }
 .check { display: flex; align-items: center; gap: .6rem; font-weight: 500; min-height: 40px; margin: 0; }
-.check input { width: 22px; height: 22px; accent-color: var(--marca); }
+.check input { width: 22px; height: 22px; accent-color: var(--marca); flex-shrink: 0; }
 .voltar { text-align: center; margin: .8rem 0 0; }
 .voltar-inline { margin-left: 1rem; }
 
@@ -200,4 +200,18 @@ input[type=date] { width: 100%; font: inherit; padding: .7rem .8rem; min-height:
   .botao-entregue { width: 100%; }
   .acoes-pedido > form { width: 100%; }
   .acoes-pedido > form .botao { flex: 1; }
+}
+
+/* ---------- Login e usuários (Passo 8) ---------- */
+.quem { display: flex; align-items: center; gap: .5rem; margin-left: auto; }
+.quem form { margin: 0; }
+.quem-nome { text-decoration: none; font-weight: 700; font-size: .92rem; text-align: right; line-height: 1.15; }
+.quem-perfil { display: block; font-weight: 500; font-size: .78rem; color: var(--suave); }
+.form-login { max-width: 420px; margin: 2rem auto 0; }
+.form-login h1 { margin-bottom: 1rem; }
+.form-login .dica { margin-top: .9rem; }
+.checks[disabled] { opacity: .75; }
+@media (max-width: 520px) {
+  .quem { width: 100%; justify-content: space-between; }
+  .quem-nome { text-align: left; }
 }

@@ -4,6 +4,7 @@
 
 <div class="titulo-linha"><h1>Comandas</h1></div>
 
+{% if pode('pedido.registrar') %}
 <form method="post" class="form form-larga">
   <h2>Abrir comanda</h2>
   <div class="linha">
@@ -18,6 +19,7 @@
   </div>
   <button class="botao" type="submit">Abrir comanda</button>
 </form>
+{% endif %}
 
 <p class="filtro-linha">
   <a href="{{ url_for('comandas', ver=('todas' if ver == 'abertas' else 'abertas')) }}">{{ 'Ver também as fechadas' if ver == 'abertas' else 'Ver só as abertas' }}</a>

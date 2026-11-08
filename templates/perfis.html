@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block titulo %}Perfis e permissões{% endblock %}
+{% block conteudo %}
+
+<h1>Usuários</h1>
+{% include "_abas_usuarios.html" %}
+
+{% if not sou_dono %}<p class="msg msg-aviso">Só o Dono pode mudar as permissões. Você pode apenas consultar.</p>{% endif %}
+
+<div class="itens">
+  {% for p in perfis %}
+  <form method="post" class="item" novalidate>
+    <input type="hidden" name="perfil_id" value="{{ p.id }}">
+    <div class="item-topo"><h3>{{ p.nome }}</h3>{% if p.fixo %}<span class="item-cat">sempre pode tudo</span>{% endif %}</div>
+    <fieldset class="checks" {{ 'disabled' if p.fixo or not sou_dono }}>
+      <legend class="so-leitor">Permissões de {{ p.nome }}</legend>
+      {% for m in permissoes %}
+      <label class="check"><input type="checkbox" name="permissao" value="{{ m.codigo }}" {{ 'checked' if m.codigo in p.permissoes }}> {{ m.descricao }}</label>
+      {% endfor %}
+    </fieldset>
+    {% if sou_dono and not p.fixo %}
+    <button type="submit" class="botao botao-pequeno">Salvar {{ p.nome }}</button>
+    {% endif %}
+  </form>
+  {% endfor %}
+</div>
+{% endblock %}

@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block titulo %}Editar usuário{% endblock %}
+{% block conteudo %}
+
+<h1>Usuários</h1>
+{% include "_abas_usuarios.html" %}
+
+<form method="post" class="form" novalidate>
+  <h2>Dados de {{ alvo.nome }}</h2>
+  <input type="hidden" name="acao" value="dados">
+  <p class="detalhe">Usuário para entrar: <strong>{{ alvo.login }}</strong> (não muda)</p>
+  <div class="campo">
+    <label for="nome">Nome</label>
+    <input id="nome" name="nome" type="text" autocomplete="off" value="{{ alvo.nome }}">
+  </div>
+  <div class="campo">
+    <label for="perfil_id">Perfil</label>
+    <select id="perfil_id" name="perfil_id" {{ 'disabled' if eu_mesmo }}>
+      {% for p in perfis %}<option value="{{ p.id }}" {{ 'selected' if p.id == alvo.perfil_id }}>{{ p.nome }}</option>{% endfor %}
+      {% if alvo.perfil_id not in perfis|map(attribute='id')|list %}<option value="{{ alvo.perfil_id }}" selected>{{ alvo.perfil }}</option>{% endif %}
+    </select>
+    {% if eu_mesmo %}<input type="hidden" name="perfil_id" value="{{ alvo.perfil_id }}">
+    <p class="dica">Você não pode mudar o seu próprio perfil.</p>{% endif %}
+  </div>
+  {% if eu_mesmo %}
+    <input type="hidden" name="ativo" value="1">
+  {% else %}
+  <label class="check"><input type="checkbox" name="ativo" value="1" {{ 'checked' if alvo.ativo }}> Ativo (pode entrar no sistema)</label>
+  {% endif %}
+  <button type="submit" class="botao">Salvar</button>
+  <a class="voltar-inline" href="{{ url_for('usuarios') }}">Voltar</a>
+</form>
+
+<form method="post" class="form" novalidate>
+  <h2>Senha provisória</h2>
+  <input type="hidden" name="acao" value="senha">
+  <p class="dica">Esqueceu a senha? Defina uma provisória e passe para a pessoa. No próximo login ela cria uma nova.</p>
+  <div class="campo">
+    <label for="senha">Nova senha provisória <span class="opc">(mín. {{ minimo }})</span></label>
+    <input id="senha" name="senha" type="text" autocomplete="off" autocapitalize="none" spellcheck="false">
+  </div>
+  <button type="submit" class="botao botao-leve">Definir senha provisória</button>
+</form>
+
+{% endblock %}

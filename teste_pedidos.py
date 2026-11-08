@@ -46,9 +46,10 @@ prod = lambda n: con.execute("SELECT id FROM produto WHERE nome=?", (n,)).fetcho
 sal = lambda n: regras.saldo(con, n)["por_setor"]
 CAIP, CERV = prod("Caipirinha de morango"), prod("Cerveja long neck")
 
-assert con.execute("PRAGMA user_version").fetchone()[0] == 2
-bd.aplicar_migracoes(con)
-assert con.execute("PRAGMA user_version").fetchone()[0] == 2
+versao = con.execute("PRAGMA user_version").fetchone()[0]
+assert versao >= 2                  # a migração 002 (pedidos) foi aplicada
+bd.aplicar_migracoes(con)           # rodar de novo não muda nada
+assert con.execute("PRAGMA user_version").fetchone()[0] == versao
 ok("migração 002 aplicada (user_version = 2) e rodar de novo não faz nada")
 
 # ---- comanda e item

@@ -10,7 +10,8 @@
     <p class="detalhe">{% if c.mesa %}Mesa {{ c.mesa }} · {% endif %}aberta às {{ c.aberta_em[11:16] }}
       {% if not aberta %}· <strong>{{ c.status }}</strong>{% endif %}</p>
   </div>
-  <a class="botao botao-leve" href="{{ url_for('comandas') }}">← Comandas</a>
+  {% if pode('pedido.registrar', 'caixa.operar') %}<a class="botao botao-leve" href="{{ url_for('comandas') }}">← Comandas</a>
+  {% else %}<a class="botao botao-leve" href="{{ url_for('entregas') }}">← Entregas</a>{% endif %}
 </div>
 
 <section aria-label="Itens da comanda">
@@ -29,14 +30,17 @@
       <div class="detalhe">{% if i.escolhas %}{{ i.escolhas }}{% endif %}{% if i.escolhas and i.observacao %} · {% endif %}{% if i.observacao %}<em>{{ i.observacao }}</em>{% endif %}</div>
       {% endif %}
       {% if i.status == 'cancelado' and i.motivo_cancelamento %}<div class="detalhe">Motivo: {{ i.motivo_cancelamento }}</div>{% endif %}
-      {% if aberta and i.status != 'cancelado' %}
+      {% set pode_entregar = i.status == 'pedido' and pode('pedido.entregar') %}
+      {% set pode_cancelar = pode('pedido.estornar') if i.status == 'entregue' else pode('pedido.registrar', 'pedido.entregar') %}
+      {% if aberta and i.status != 'cancelado' and (pode_entregar or pode_cancelar) %}
       <div class="acoes-pedido">
-        {% if i.status == 'pedido' %}
+        {% if pode_entregar %}
         <form method="post" action="{{ url_for('item_entregar', item_id=i.id) }}">
           <input type="hidden" name="voltar" value="{{ request.path }}">
           <button class="botao botao-entregue" type="submit">ITEM ENTREGUE</button>
         </form>
         {% endif %}
+        {% if pode_cancelar %}
         <form method="post" action="{{ url_for('item_cancelar', item_id=i.id) }}" class="form-cancelar">
           <input type="hidden" name="voltar" value="{{ request.path }}">
           {% if i.status == 'entregue' %}
@@ -45,6 +49,7 @@
           {% endif %}
           <button class="botao botao-leve botao-pequeno" type="submit">Cancelar item</button>
         </form>
+        {% endif %}
       </div>
       {% endif %}
     </li>
@@ -53,7 +58,7 @@
   <p class="total-linha">Total: <strong>{{ d.total|moeda }}</strong></p>
 </section>
 
-{% if aberta %}
+{% if aberta and pode('caixa.operar') %}
 <div class="acoes-comanda">
   <form method="post" action="{{ url_for('comanda_fechar', comanda_id=c.id) }}">
     <button class="botao" type="submit">Fechar comanda</button>
@@ -62,7 +67,9 @@
     <button class="botao botao-leve" type="submit">Cancelar comanda</button>
   </form>
 </div>
+{% endif %}
 
+{% if aberta and pode('pedido.registrar') %}
 <section id="produtos" aria-label="Adicionar produtos">
   <h2>Adicionar produto</h2>
   <div class="itens">

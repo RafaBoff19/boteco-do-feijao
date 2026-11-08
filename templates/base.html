@@ -10,14 +10,23 @@
   <header class="topo">
     <div class="topo-in">
       <a class="marca" href="{{ url_for('estoque') }}">Buteco do Feijão</a>
+      {% if usuario %}
       <nav>
-        <a href="{{ url_for('estoque') }}"    class="{{ 'ativo' if request.endpoint == 'estoque' }}">Estoque</a>
-        <a href="{{ url_for('comandas') }}"   class="{{ 'ativo' if request.endpoint in ('comandas', 'comanda') }}">Comandas</a>
-        <a href="{{ url_for('entregas') }}"   class="{{ 'ativo' if request.endpoint == 'entregas' }}">Entregas</a>
-        <a href="{{ url_for('movimentar') }}" class="{{ 'ativo' if request.endpoint == 'movimentar' }}">Movimentar</a>
-        <a href="{{ url_for('historico') }}"  class="{{ 'ativo' if request.endpoint == 'historico' }}">Histórico</a>
-        <a href="{{ url_for('cadastros_inicio') }}" class="{{ 'ativo' if request.endpoint and request.endpoint.startswith('cadastro') }}">Cadastros</a>
+        {% if pode('estoque.ver') %}<a href="{{ url_for('estoque') }}" class="{{ 'ativo' if request.endpoint == 'estoque' }}">Estoque</a>{% endif %}
+        {% if pode('pedido.registrar', 'caixa.operar') %}<a href="{{ url_for('comandas') }}" class="{{ 'ativo' if request.endpoint in ('comandas', 'comanda') }}">Comandas</a>{% endif %}
+        {% if pode('pedido.entregar') %}<a href="{{ url_for('entregas') }}" class="{{ 'ativo' if request.endpoint == 'entregas' }}">Entregas</a>{% endif %}
+        {% if pode('estoque.movimentar', 'estoque.perda') %}<a href="{{ url_for('movimentar') }}" class="{{ 'ativo' if request.endpoint == 'movimentar' }}">{{ 'Movimentar' if pode('estoque.movimentar') else 'Perda' }}</a>{% endif %}
+        {% if pode('estoque.ver') %}<a href="{{ url_for('historico') }}" class="{{ 'ativo' if request.endpoint == 'historico' }}">Histórico</a>{% endif %}
+        {% if pode('produto.gerir', 'fornecedor.gerir') %}<a href="{{ url_for('cadastros_inicio') }}" class="{{ 'ativo' if request.endpoint and request.endpoint.startswith('cadastro') }}">Cadastros</a>{% endif %}
+        {% if pode('usuario.gerir') %}<a href="{{ url_for('usuarios') }}" class="{{ 'ativo' if request.endpoint in ('usuarios', 'usuario_editar', 'perfis') }}">Usuários</a>{% endif %}
       </nav>
+      <div class="quem">
+        <a href="{{ url_for('minha_conta') }}" class="quem-nome" title="Minha conta">{{ usuario.nome }} <span class="quem-perfil">{{ usuario.perfil }}</span></a>
+        <form method="post" action="{{ url_for('logout') }}">
+          <button type="submit" class="botao botao-leve botao-pequeno">Sair</button>
+        </form>
+      </div>
+      {% endif %}
     </div>
   </header>
 
@@ -30,7 +39,7 @@
     {% block conteudo %}{% endblock %}
   </main>
 
-  <footer class="rodape">Modo provisório: sem login, as operações ficam em nome do Administrador.</footer>
+  {% if usuario %}<footer class="rodape">Aparelho compartilhado? Toque em <strong>Sair</strong> ao terminar, para ninguém usar o seu nome.</footer>{% endif %}
   {% block scripts %}{% endblock %}
 </body>
 </html>

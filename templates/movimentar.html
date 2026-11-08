@@ -8,9 +8,9 @@
 
   <fieldset class="tipos">
     <legend>O que aconteceu?</legend>
-    {% for valor, nome in [('entrada','Entrada'), ('perda','Perda'), ('saida','Saída'), ('transferencia','Transferir'), ('ajuste','Inventário')] %}
+    {% for valor, nome in [('entrada','Entrada'), ('perda','Perda'), ('saida','Saída'), ('transferencia','Transferir'), ('ajuste','Inventário')] if valor in tipos_permitidos %}
     <label class="tipo">
-      <input type="radio" name="tipo" value="{{ valor }}" {{ 'checked' if form.get('tipo') == valor }} required>
+      <input type="radio" name="tipo" value="{{ valor }}" {{ 'checked' if form.get('tipo') == valor or tipos_permitidos|length == 1 }} required>
       <span>{{ nome }}</span>
     </label>
     {% endfor %}

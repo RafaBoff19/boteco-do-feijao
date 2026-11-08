@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block titulo %}Sem permissão{% endblock %}
+{% block conteudo %}
+<div class="form">
+  <h1>Sem permissão</h1>
+  <p>O seu perfil{% if usuario %} (<strong>{{ usuario.perfil }}</strong>){% endif %} não pode usar esta tela ou fazer esta ação.
+     Se precisar, peça ao Dono para liberar.</p>
+  <a class="botao" href="{{ inicio }}">Voltar ao início</a>
+</div>
+{% endblock %}
