@@ -14,6 +14,7 @@ Uso pelo terminal:
 """
 import sqlite3
 import sys
+import threading
 from pathlib import Path
 
 # Os caminhos partem da pasta onde este arquivo está, então funciona
@@ -24,6 +25,10 @@ ARQUIVO_SCHEMA = PASTA / "banco" / "schema.sql"
 ARQUIVO_SEED = PASTA / "banco" / "seed.sql"
 PASTA_MIGRACOES = PASTA / "banco" / "migracoes"
 
+# o Flask atende várias requisições ao mesmo tempo (uma "thread" para cada);
+# esta trava garante que só uma delas aplica migrações por vez
+_trava_migracoes = threading.Lock()
+
 
 def aplicar_migracoes(con):
     """Aplica, em ordem, os arquivos banco/migracoes/NNN_nome.sql que ainda não foram aplicados.
@@ -31,18 +36,22 @@ def aplicar_migracoes(con):
     O número da última migração aplicada fica gravado no próprio banco (PRAGMA user_version),
     então rodar isto várias vezes é seguro, e bancos antigos são atualizados sem perder dados.
     Cada migração roda inteira ou não roda (se der erro, volta tudo).
+
+    A trava (_trava_migracoes) faz uma requisição esperar a outra: sem ela, duas telas
+    abertas ao mesmo tempo liam "versão 2" juntas e as duas tentavam aplicar a 003.
     """
-    atual = con.execute("PRAGMA user_version").fetchone()[0]
-    for arquivo in sorted(PASTA_MIGRACOES.glob("[0-9][0-9][0-9]_*.sql")):
-        numero = int(arquivo.name[:3])
-        if numero <= atual:
-            continue
-        sql = arquivo.read_text(encoding="utf-8")
-        try:
-            con.executescript(f"BEGIN;\n{sql}\nPRAGMA user_version = {numero};\nCOMMIT;")
-        except Exception:
-            con.rollback()
-            raise
+    with _trava_migracoes:
+        atual = con.execute("PRAGMA user_version").fetchone()[0]   # lido já com a trava
+        for arquivo in sorted(PASTA_MIGRACOES.glob("[0-9][0-9][0-9]_*.sql")):
+            numero = int(arquivo.name[:3])
+            if numero <= atual:
+                continue
+            sql = arquivo.read_text(encoding="utf-8")
+            try:
+                con.executescript(f"BEGIN;\n{sql}\nPRAGMA user_version = {numero};\nCOMMIT;")
+            except Exception:
+                con.rollback()
+                raise
 
 
 def criar_banco(com_dados_ficticios=True):
