@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block titulo %}Compras{% endblock %}
+{% block conteudo %}
+
+<div class="titulo-linha">
+  <h1>Compras</h1>
+  {% if pode('compra.solicitar') %}<a class="botao" href="{{ url_for('compra_nova') }}">+ Pedir compra</a>{% endif %}
+</div>
+
+<p class="filtro-linha">
+  <a href="{{ url_for('compras_lista', ver=('todas' if ver == 'abertas' else 'abertas')) }}">{{ 'Ver também as encerradas' if ver == 'abertas' else 'Ver só as em andamento' }}</a>
+</p>
+
+{% if not lista %}<p class="vazio">Nenhuma compra {{ 'em andamento' if ver == 'abertas' }}.</p>{% endif %}
+
+<div class="cards">
+  {% for c in lista %}
+  {% set cor = {'pendente': 'card-baixo', 'aprovada': 'card-ok', 'recusada': 'card-negativo'}.get(c.status, '') %}
+  <a class="card card-link {{ cor }} {{ 'card-fechada' if c.status in ('recebida', 'recusada', 'cancelada') }}" href="{{ url_for('compra_ver', compra_id=c.id) }}">
+    <div class="card-topo">
+      <h3>Compra nº {{ c.id }}</h3>
+      <span class="selo {{ {'pendente': 'selo-baixo', 'aprovada': 'selo-ok', 'recusada': 'selo-negativo'}.get(c.status, 'selo-inativo') }}">{{ nomes[c.status] }}</span>
+    </div>
+    <p class="detalhe">{{ c.fornecedor or 'Fornecedor a definir' }} · {{ c.qtd_itens }} item(ns)</p>
+    <p class="detalhe resumo-itens">{{ c.resumo }}</p>
+    <p class="detalhe">Pedida por {{ c.solicitante }} em {{ c.solicitada_em[8:10] }}/{{ c.solicitada_em[5:7] }}</p>
+    {% if c.total_estimado %}<p class="total">~ {{ c.total_estimado|moeda }}</p>{% endif %}
+  </a>
+  {% endfor %}
+</div>
+{% endblock %}

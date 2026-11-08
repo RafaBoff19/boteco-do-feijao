@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block titulo %}Pedir compra{% endblock %}
+
+{% macro linha_compra(l) %}
+<div class="linha-receita linha-compra">
+  <div class="campo">
+    <label>Insumo</label>
+    <select name="insumo">
+      <option value="">Escolha...</option>
+      {% for categoria, grupo in insumos|groupby('categoria') %}
+      <optgroup label="{{ categoria }}">
+        {% for i in grupo %}<option value="{{ i.id }}" data-uc="{{ i.unidade_compra }}" data-fator="{{ i.fator_compra|br }}" data-ucons="{{ i.unidade_consumo }}"
+                {{ 'selected' if l.get('insumo') == i.id|string }}>{{ i.nome }}</option>{% endfor %}
+      </optgroup>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="campo">
+    <label>Quantidade <span class="un-rotulo"></span></label>
+    <input name="quantidade" type="text" inputmode="decimal" autocomplete="off" value="{{ l.get('quantidade', '') }}">
+  </div>
+  <div class="campo">
+    <label>Preço unit. <span class="opc">(R$, opcional)</span></label>
+    <input name="preco" type="text" inputmode="decimal" autocomplete="off" value="{{ l.get('preco', '') }}">
+  </div>
+  <button type="button" class="remover" aria-label="Remover item" title="Remover item">✕</button>
+</div>
+{% endmacro %}
+
+{% block conteudo %}
+<h1>Pedir compra</h1>
+
+{% if sugestao %}
+<section class="sugestao" aria-label="Sugestão de compra">
+  <div class="titulo-linha">
+    <h2>No mínimo ou abaixo ({{ sugestao|length }})</h2>
+    <a class="botao botao-leve botao-pequeno" href="{{ url_for('compra_nova', sugestao=1) }}">Usar esta sugestão</a>
+  </div>
+  <ul class="lista-sugestao">
+    {% for s in sugestao %}
+    <li><strong>{{ s.insumo }}</strong>: tem {{ s.saldo_total|br }} {{ s.unidade }} (mínimo {{ s.minimo_efetivo|br }})
+      → sugerido <strong>{{ s.sugerido }} {{ s.unidade_compra }}</strong></li>
+    {% endfor %}
+  </ul>
+  <p class="dica">A sugestão repõe até {{ fator_sugestao }}× o mínimo, arredondando para cima.</p>
+</section>
+{% endif %}
+
+<form method="post" class="form form-largo" novalidate>
+  <div class="linha">
+    <div class="campo">
+      <label for="fornecedor">Fornecedor <span class="opc">(opcional)</span></label>
+      <select id="fornecedor" name="fornecedor">
+        <option value="">A definir</option>
+        {% for f in fornecedores %}<option value="{{ f.id }}" {{ 'selected' if form.get('fornecedor') == f.id|string }}>{{ f.nome }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="campo" style="flex: 2">
+      <label for="observacao">Observação <span class="opc">(opcional)</span></label>
+      <input id="observacao" name="observacao" type="text" autocomplete="off" value="{{ form.get('observacao', '') }}" placeholder="ex.: para o fim de semana do feriado">
+    </div>
+  </div>
+
+  <fieldset class="receita">
+    <legend>Itens (na unidade de compra: fardo, garrafa, saco...)</legend>
+    <div id="linhas">
+      {% for l in linhas %}{{ linha_compra(l) }}{% endfor %}
+    </div>
+    <button type="button" id="adicionar" class="botao botao-leve botao-pequeno">+ Item</button>
+  </fieldset>
+
+  <template id="modelo-linha">{{ linha_compra({}) }}</template>
+
+  <button type="submit" class="botao botao-grande">Enviar para aprovação</button>
+  <p class="voltar"><a href="{{ url_for('compras_lista') }}">Cancelar e voltar</a></p>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const area = document.getElementById('linhas');
+  const modelo = document.getElementById('modelo-linha');
+
+  function atualizarUnidade(linha) {
+    const sel = linha.querySelector('select');
+    const opt = sel.options[sel.selectedIndex];
+    const rot = linha.querySelector('.un-rotulo');
+    if (opt && opt.dataset.uc) {
+      rot.textContent = '(' + opt.dataset.uc + (opt.dataset.fator !== '1' ? ' de ' + opt.dataset.fator + ' ' + opt.dataset.ucons : '') + ')';
+    } else { rot.textContent = ''; }
+  }
+
+  function ligar(linha) {
+    linha.querySelector('select').addEventListener('change', function () { atualizarUnidade(linha); });
+    linha.querySelector('.remover').addEventListener('click', function () {
+      if (area.children.length > 1) { linha.remove(); }
+      else { linha.querySelectorAll('input').forEach(function (i) { i.value = ''; }); linha.querySelector('select').value = ''; atualizarUnidade(linha); }
+    });
+    atualizarUnidade(linha);
+  }
+
+  area.querySelectorAll('.linha-compra').forEach(ligar);
+  document.getElementById('adicionar').addEventListener('click', function () {
+    area.appendChild(modelo.content.cloneNode(true));
+    const nova = area.lastElementChild;
+    ligar(nova);
+    nova.querySelector('select').focus();
+  });
+})();
+</script>
+{% endblock %}

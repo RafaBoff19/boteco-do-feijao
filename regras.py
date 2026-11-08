@@ -87,24 +87,23 @@ def _fmt(valor):
 
 
 def _inserir(con, insumo_id, setor_id, tipo, quantidade, usuario_id,
-             motivo=None, fornecedor_id=None, transferencia_id=None, pedido_item_id=None):
-    """Grava uma movimentação (quantidade COM sinal). O saldo é atualizado pelo trigger do banco."""
-    if pedido_item_id is None:
-        cur = con.execute(
-            """INSERT INTO movimentacao
-                   (insumo_id, setor_id, tipo, quantidade, motivo, fornecedor_id, usuario_id, transferencia_id)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (insumo_id, setor_id, tipo, quantidade, motivo, fornecedor_id, usuario_id, transferencia_id),
-        )
-    else:
-        cur = con.execute(
-            """INSERT INTO movimentacao
-                   (insumo_id, setor_id, tipo, quantidade, motivo, fornecedor_id, usuario_id, transferencia_id,
-                    pedido_item_id)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (insumo_id, setor_id, tipo, quantidade, motivo, fornecedor_id, usuario_id, transferencia_id,
-             pedido_item_id),
-        )
+             motivo=None, fornecedor_id=None, transferencia_id=None, pedido_item_id=None, compra_item_id=None):
+    """Grava uma movimentação (quantidade COM sinal). O saldo é atualizado pelo trigger do banco.
+
+    pedido_item_id / compra_item_id ligam a movimentação ao pedido ou à compra que a causou.
+    Só entram no INSERT quando informados (são colunas criadas por migrações).
+    """
+    colunas = {"insumo_id": insumo_id, "setor_id": setor_id, "tipo": tipo, "quantidade": quantidade,
+               "motivo": motivo, "fornecedor_id": fornecedor_id, "usuario_id": usuario_id,
+               "transferencia_id": transferencia_id}
+    if pedido_item_id is not None:
+        colunas["pedido_item_id"] = pedido_item_id
+    if compra_item_id is not None:
+        colunas["compra_item_id"] = compra_item_id
+    # os nomes das colunas vêm só deste código (nunca do usuário), então montar o SQL assim é seguro
+    cur = con.execute(
+        f"INSERT INTO movimentacao ({', '.join(colunas)}) VALUES ({', '.join('?' * len(colunas))})",
+        tuple(colunas.values()))
     return cur.lastrowid
 
 

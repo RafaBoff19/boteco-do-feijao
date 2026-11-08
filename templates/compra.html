@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block titulo %}Compra nº {{ c.id }}{% endblock %}
+{% block conteudo %}
+
+<div class="titulo-linha">
+  <div>
+    <h1>Compra nº {{ c.id }}</h1>
+    <p class="detalhe">{{ c.fornecedor or 'Fornecedor a definir' }} · pedida por {{ c.solicitante }} em {{ c.solicitada_em[8:10] }}/{{ c.solicitada_em[5:7] }} às {{ c.solicitada_em[11:16] }}</p>
+  </div>
+  <a class="botao botao-leve" href="{{ url_for('compras_lista') }}">← Compras</a>
+</div>
+
+<p><span class="selo {{ {'pendente': 'selo-baixo', 'aprovada': 'selo-ok', 'recusada': 'selo-negativo'}.get(c.status, 'selo-inativo') }} selo-grande">{{ d.status_nome }}</span></p>
+{% if c.observacao %}<p class="detalhe">Observação: <em>{{ c.observacao }}</em></p>{% endif %}
+{% if c.decidida_por %}
+<p class="detalhe">
+  {{ {'aprovada': 'Aprovada', 'recebida': 'Aprovada', 'recusada': 'Recusada', 'cancelada': 'Cancelada'}[c.status] }}
+  por {{ c.decisor }} em {{ c.decidida_em[8:10] }}/{{ c.decidida_em[5:7] }} às {{ c.decidida_em[11:16] }}{% if c.motivo %} · motivo: {{ c.motivo }}{% endif %}
+</p>
+{% endif %}
+{% if c.recebida_por %}<p class="detalhe">Recebida por {{ c.recebedor }} em {{ c.recebida_em[8:10] }}/{{ c.recebida_em[5:7] }} às {{ c.recebida_em[11:16] }}</p>{% endif %}
+
+{% set recebendo = c.status == 'aprovada' and pode('estoque.movimentar') %}
+
+{% if recebendo %}
+<form method="post" action="{{ url_for('compra_receber', compra_id=c.id) }}" novalidate>
+  <h2>Conferir e receber</h2>
+  <p class="dica">Confira o que chegou. Se veio menos, corrija a quantidade (0 = não veio). O que chegar entra no setor <strong>Estoque</strong>.</p>
+{% else %}
+  <h2>Itens</h2>
+{% endif %}
+
+<ul class="itens-pedido">
+  {% for i in d.itens %}
+  <li class="pedido {{ 'pedido-entregue' if c.status == 'recebida' else '' }}">
+    <div class="pedido-topo">
+      <strong>{{ i.qtd_compra|br }} {{ i.unidade_compra }} · {{ i.nome }}</strong>
+      {% if i.subtotal is not none %}<span class="valor">~ {{ i.subtotal|moeda }}</span>{% endif %}
+    </div>
+    <div class="detalhe">
+      {% if i.fator_compra != 1 %}= {{ i.quantidade|br }} {{ i.unidade_consumo }} · {% endif %}
+      {% if i.preco_estimado is not none %}estimado {{ i.preco_estimado|moeda }}/{{ i.unidade_compra }} · {% endif %}
+      tem hoje {{ i.saldo|br }} {{ i.unidade_consumo }}
+    </div>
+    {% if c.status == 'recebida' %}
+    <div class="detalhe">Chegou: <strong>{{ i.recebida_compra|br }} {{ i.unidade_compra }}</strong>
+      {% if i.preco_pago is not none %}· pago {{ i.preco_pago|moeda }}/{{ i.unidade_compra }}{% endif %}
+      {% if i.recebida_compra is not none and i.recebida_compra < i.qtd_compra - 0.000001 %}<span class="selo selo-baixo">veio menos</span>{% endif %}
+    </div>
+    {% endif %}
+    {% if recebendo %}
+    <input type="hidden" name="item" value="{{ i.id }}">
+    <input type="hidden" name="nome_{{ i.id }}" value="{{ i.nome }}">
+    <div class="linha receber-linha">
+      <div class="campo">
+        <label for="r-{{ i.id }}">Chegou ({{ i.unidade_compra }})</label>
+        <input type="text" id="r-{{ i.id }}" name="recebido_{{ i.id }}" inputmode="decimal" autocomplete="off" value="{{ i.qtd_compra|inp }}">
+      </div>
+      <div class="campo">
+        <label for="p-{{ i.id }}">Preço pago por {{ i.unidade_compra }} <span class="opc">(opcional)</span></label>
+        <input type="text" id="p-{{ i.id }}" name="preco_{{ i.id }}" inputmode="decimal" autocomplete="off" value="{{ i.preco_estimado|inp }}">
+      </div>
+    </div>
+    {% endif %}
+  </li>
+  {% endfor %}
+</ul>
+{% if d.total_estimado is not none %}<p class="total-linha">Total estimado: <strong>{{ d.total_estimado|moeda }}</strong></p>{% endif %}
+
+{% if recebendo %}
+  <button type="submit" class="botao botao-grande botao-entregue">MERCADORIA RECEBIDA</button>
+</form>
+{% endif %}
+
+{% if c.status == 'pendente' and pode('compra.aprovar') %}
+<div class="decisao">
+  <h2>Decisão</h2>
+  <div class="acoes-pedido">
+    <form method="post" action="{{ url_for('compra_aprovar', compra_id=c.id) }}">
+      <button type="submit" class="botao botao-entregue">APROVAR</button>
+    </form>
+    <form method="post" action="{{ url_for('compra_recusar', compra_id=c.id) }}">
+      <label class="so-leitor" for="motivo-recusa">Motivo da recusa</label>
+      <input type="text" id="motivo-recusa" name="motivo" placeholder="Motivo da recusa" required autocomplete="off">
+      <button type="submit" class="botao botao-leve">Recusar</button>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+{% if pode_cancelar %}
+<details class="cancelar-compra">
+  <summary>Cancelar esta compra</summary>
+  <form method="post" action="{{ url_for('compra_cancelar', compra_id=c.id) }}" class="acoes-pedido">
+    <label class="so-leitor" for="motivo-cancelar">Motivo do cancelamento</label>
+    <input type="text" id="motivo-cancelar" name="motivo" placeholder="Motivo do cancelamento" required autocomplete="off">
+    <button type="submit" class="botao botao-leve">Cancelar compra</button>
+  </form>
+</details>
+{% endif %}
+
+{% endblock %}

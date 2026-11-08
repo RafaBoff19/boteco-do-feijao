@@ -18,6 +18,7 @@ from flask import Flask, abort, flash, g, redirect, render_template, request, se
 import auth
 import bd
 import cadastros
+import compras
 import pedidos
 import regras
 from regras import ErroDeRegra
@@ -135,7 +136,15 @@ def conferir_login():
 
 @app.context_processor
 def para_os_templates():
-    return {"usuario": g.get("usuario"), "pode": pode}
+    return {"usuario": g.get("usuario"), "pode": pode, "compras_aviso": _compras_aviso()}
+
+
+def _compras_aviso():
+    """Número que aparece no menu Compras: o que espera por VOCÊ (aprovar ou receber)."""
+    if g.get("usuario") is None or not pode("compra.aprovar", "estoque.movimentar"):
+        return 0
+    n = compras.contar_pendencias(con())
+    return (n["pendente"] if pode("compra.aprovar") else 0) + (n["aprovada"] if pode("estoque.movimentar") else 0)
 
 
 @app.errorhandler(403)
@@ -948,6 +957,141 @@ def perfis():
             flash(str(e), "erro")
     return render_template("perfis.html", perfis=auth.listar_perfis(c), permissoes=auth.listar_permissoes(c),
                            sou_dono=(g.usuario["perfil"] == auth.PERFIL_DONO))
+
+
+# ---------------------------------------------------------------------
+# Compras com aprovação (Passo 9)
+# ---------------------------------------------------------------------
+
+PERMISSOES_COMPRAS = ("compra.solicitar", "compra.aprovar", "estoque.movimentar")
+
+
+@app.route("/compras")
+@requer(*PERMISSOES_COMPRAS)
+def compras_lista():
+    ver = request.args.get("ver", "abertas")
+    status = ("pendente", "aprovada") if ver == "abertas" else None
+    return render_template("compras.html", lista=compras.listar_compras(con(), status), ver=ver,
+                           nomes=compras.STATUS_NOMES)
+
+
+def _opcoes_do_form_compra():
+    c = con()
+    return {
+        "insumos": c.execute(
+            """SELECT i.id, i.nome, i.unidade_compra, i.unidade_consumo, i.fator_compra,
+                      COALESCE(cat.nome, 'Sem categoria') AS categoria
+               FROM insumo i LEFT JOIN categoria cat ON cat.id = i.categoria_id
+               WHERE i.ativo = 1 ORDER BY categoria, i.nome""").fetchall(),
+        "fornecedores": c.execute("SELECT id, nome FROM fornecedor WHERE ativo = 1 ORDER BY nome").fetchall(),
+        "sugestao": compras.sugestao_de_compra(c),
+        "fator_sugestao": compras.FATOR_SUGESTAO,
+    }
+
+
+def _linhas_do_form_compra():
+    f = request.form
+    return [{"insumo": i, "quantidade": q, "preco": p}
+            for i, q, p in zip(f.getlist("insumo"), f.getlist("quantidade"), f.getlist("preco"))
+            if i.strip() or q.strip() or p.strip()]
+
+
+@app.route("/compras/nova", methods=["GET", "POST"])
+@requer("compra.solicitar")
+def compra_nova():
+    if request.method == "POST":
+        linhas = _linhas_do_form_compra()
+        try:
+            itens = []
+            for n, l in enumerate(linhas, start=1):
+                if not l["insumo"]:
+                    raise ErroDeRegra(f"Item {n}: escolha o insumo.")
+                try:
+                    itens.append({"insumo_id": int(l["insumo"]), "quantidade": _numero(l["quantidade"]),
+                                  "preco_estimado": _numero_opcional(l["preco"])})
+                except ErroDeRegra as e:
+                    raise ErroDeRegra(f"Item {n}: {e}")
+            cid = compras.criar_compra(con(), itens, uid(), fornecedor_id=_inteiro(request.form.get("fornecedor"), "Fornecedor"),
+                                       observacao=request.form.get("observacao"))
+            flash("Compra enviada para aprovação.", "ok")
+            return redirect(url_for("compra_ver", compra_id=cid))
+        except ErroDeRegra as e:
+            flash(str(e), "erro")
+        return render_template("compra_form.html", form=request.form, linhas=linhas or [{}], **_opcoes_do_form_compra())
+
+    opcoes = _opcoes_do_form_compra()
+    if request.args.get("sugestao"):
+        linhas = [{"insumo": str(s["insumo_id"]), "quantidade": str(s["sugerido"]),
+                   "preco": inp(s["ultimo_preco"])} for s in opcoes["sugestao"]]
+    else:
+        linhas = []
+    return render_template("compra_form.html", form={}, linhas=linhas or [{}], **opcoes)
+
+
+@app.route("/compras/<int:compra_id>")
+@requer(*PERMISSOES_COMPRAS)
+def compra_ver(compra_id):
+    dados = compras.dados_compra(con(), compra_id)
+    if dados is None:
+        abort(404)
+    c = dados["compra"]
+    pode_cancelar = c["status"] in ("pendente", "aprovada") and (
+        pode("compra.aprovar") or (pode("compra.solicitar") and c["solicitada_por"] == uid()))
+    return render_template("compra.html", d=dados, c=c, pode_cancelar=pode_cancelar)
+
+
+def _acao_compra(compra_id, funcao, sucesso, *args):
+    try:
+        funcao(con(), compra_id, uid(), *args)
+        flash(sucesso, "ok")
+    except ErroDeRegra as e:
+        flash(str(e), "erro")
+    return redirect(url_for("compra_ver", compra_id=compra_id))
+
+
+@app.post("/compras/<int:compra_id>/aprovar")
+@requer("compra.aprovar")
+def compra_aprovar(compra_id):
+    return _acao_compra(compra_id, compras.aprovar, "Compra aprovada. Agora é só comprar e, quando chegar, dar o recebimento.")
+
+
+@app.post("/compras/<int:compra_id>/recusar")
+@requer("compra.aprovar")
+def compra_recusar(compra_id):
+    return _acao_compra(compra_id, compras.recusar, "Compra recusada.", request.form.get("motivo"))
+
+
+@app.post("/compras/<int:compra_id>/cancelar")
+@requer("compra.solicitar", "compra.aprovar")
+def compra_cancelar(compra_id):
+    c = con().execute("SELECT solicitada_por FROM compra WHERE id = ?", (compra_id,)).fetchone()
+    # quem só pede compras pode cancelar apenas as próprias
+    if c is not None and not pode("compra.aprovar") and c["solicitada_por"] != uid():
+        abort(403)
+    return _acao_compra(compra_id, compras.cancelar, "Compra cancelada.", request.form.get("motivo"))
+
+
+@app.post("/compras/<int:compra_id>/receber")
+@requer("estoque.movimentar")
+def compra_receber(compra_id):
+    f = request.form
+    try:
+        recebidos = {}
+        for item_id in f.getlist("item"):
+            nome = f.get(f"nome_{item_id}", "item")
+            try:
+                recebidos[int(item_id)] = {"quantidade": _numero(f.get(f"recebido_{item_id}")),
+                                           "preco_pago": _numero_opcional(f.get(f"preco_{item_id}"))}
+            except ErroDeRegra as e:
+                raise ErroDeRegra(f"{nome}: {e}")
+        r = compras.receber(con(), compra_id, uid(), recebidos)
+        flash(f"Mercadoria recebida: {len(r['movimentacao_ids'])} entrada(s) registrada(s) no Estoque.", "ok")
+        for falta in r["faltas"]:
+            flash(f"Chegou menos que o pedido · {falta}", "aviso")
+        _avisos(r)
+    except (ErroDeRegra, ValueError) as e:
+        flash(str(e), "erro")
+    return redirect(url_for("compra_ver", compra_id=compra_id))
 
 
 def ip_local():

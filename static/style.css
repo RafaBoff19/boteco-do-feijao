@@ -215,3 +215,19 @@ input[type=date] { width: 100%; font: inherit; padding: .7rem .8rem; min-height:
   .quem { width: 100%; justify-content: space-between; }
   .quem-nome { text-align: left; }
 }
+
+/* ---------- Compras (Passo 9) ---------- */
+nav a .contador { font-size: .75rem; padding: 0 .45rem; }
+.sugestao { background: var(--aviso-fundo); border: 1px solid var(--aviso); border-radius: var(--raio); padding: .8rem 1rem; margin: 1rem 0; max-width: 760px; }
+.sugestao .titulo-linha { margin: 0 0 .4rem; }
+.sugestao h2 { color: var(--aviso); margin: 0; }
+.lista-sugestao { margin: 0 0 .4rem; padding-left: 1.1rem; }
+.lista-sugestao li { margin-bottom: .2rem; }
+.resumo-itens { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.selo-grande { font-size: .95rem; padding: .3rem .8rem; }
+.receber-linha { margin-top: .6rem; }
+.receber-linha .campo { margin-bottom: 0; }
+.decisao { margin: 1.5rem 0; }
+.cancelar-compra { margin: 1.5rem 0; }
+.cancelar-compra summary { cursor: pointer; color: var(--suave); font-weight: 600; min-height: 44px; display: flex; align-items: center; }
+.cancelar-compra form { margin-top: .5rem; }
