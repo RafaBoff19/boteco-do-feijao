@@ -4,10 +4,11 @@ Projeto de TCC de um amigo do Rafa (pode virar produto real). Controle de estoqu
 
 ## Como rodar
 ```
-python -m pip install -r requirements.txt   # flask e segno (QR Code)
+python -m pip install -r requirements.txt   # flask, segno (QR Code) e waitress (servidor)
 python bd.py            # cria estoque.db com dados fictícios (python bd.py --recriar apaga e recria)
 python app.py           # http://localhost:5000 (também acessível pelo IP do PC na rede local)
 python teste_regras.py; python teste_cadastros.py; python teste_produtos.py; python teste_pedidos.py; python teste_login.py; python teste_compras.py; python teste_qrcode.py; python teste_reposicao.py
+python -m pip install pyinstaller; python -m PyInstaller --noconfirm boteco.spec   # gera dist/BotecoDoFeijao.exe
 ```
 Os testes usam banco em memória e não mexem no `estoque.db`. Todos devem terminar em "TUDO CERTO". Rode-os depois de qualquer mudança em regras.
 
@@ -33,9 +34,10 @@ Login e perfis (Passo 8, migração 003): senha com hash (werkzeug), primeiro ac
 Compras (Passo 9, migração 004): pendente → aprovada/recusada → recebida (ou cancelada; recusa e cancelamento exigem motivo). Pedir e aprovar não mexem no estoque; **receber** gera uma `entrada` por item no setor Estoque (ligada por `movimentacao.compra_item_id`, com o fornecedor da compra) e grava o último preço pago em `insumo_fornecedor`. Quantidades guardadas em unidade de consumo, mostradas em unidade de compra. Quem pediu não aprova o próprio pedido (exceto o Dono). Permissões: `compra.solicitar` pede, `compra.aprovar` decide, `estoque.movimentar` recebe. Sugestão de compra: itens no mínimo ou abaixo, repondo até 2× o mínimo.
 Pedidos por QR Code (Passo 10, migração 005): decidido **Wi-Fi do bar** (sem nuvem) e **garçom confirma**. Cada mesa (`mesa`) tem um código sorteado; o QR aponta para `http://<IP do PC>:5000/m/<codigo>` (página pública, sem login; "trocar código" invalida o QR antigo). O cliente abre a própria comanda (guardada no cookie assinado do celular dele) e pede; o item nasce com `origem='cliente'` e `confirmado_em` NULL ("aguardando"): não aparece em Entregas, não pode ser entregue e impede fechar a comanda até o garçom (`pedido.registrar`) CONFIRMAR ou Recusar. O que o cliente faz fica no nome do usuário de sistema `qrcode` (inativo, sem senha, escondido em Usuários). Limites: 10 unidades por pedido, 10 itens aguardando por comanda. `mesa.gerir` (Dono, Gerente) cadastra mesas e imprime os QR (SVG via `segno`).
 Comunicação Bar↔Estoque (Passo 11, migração 006): o Bar pede reposição (`reposicao.pedir`: Bartender, Gerente) e o Estoque responde (`reposicao.atender`: Gerente). pendente → atendida/recusada/cancelada (recusa exige motivo; só quem pediu cancela). Pedir não mexe no estoque; **enviar** gera uma `transferencia` Estoque→Bar por item, na mesma transação da mudança de status (`movimentacao.reposicao_item_id`), sem envio duplo. Enviar mais do que há deixa o Estoque negativo e avisa. Urgentes vêm primeiro na fila.
+Executável (Passo 12): `boteco.spec` gera um `.exe` de arquivo único com console. `bd.PASTA_RECURSOS` (telas, CSS, .sql; dentro do .exe) é separada de `bd.PASTA_DADOS` (`estoque.db` e `chave_secreta.txt`, ao lado do .exe, para não sumirem). O servidor é o `waitress`. Depois de mudar o código, gerar o .exe de novo.
 
 ## Próximo passo
-Executável (.exe com PyInstaller). Fora do escopo inicial: maquininha de cartão, impressora, comanda compartilhada por mesa.
+Melhorias (a combinar). Fora do escopo inicial: maquininha de cartão, impressora, comanda compartilhada por mesa.
 
 ## Pontos em aberto (confirmar com o dono do bar)
 - Dose do drink: 100 ml (spec) ou 150 ml (exemplo do documento)? Kit é 150 ml.
@@ -45,6 +47,7 @@ Executável (.exe com PyInstaller). Fora do escopo inicial: maquininha de cartã
 - QR Code: fixar o IP do PC no roteador (senão os QR impressos param de funcionar) e, de preferência, uma rede Wi-Fi de clientes separada.
 - Papel do Caixa sem maquininha; estabilidade da internet; estoque real inicial.
 - Sugestão de compra repõe até 2× o mínimo (`FATOR_SUGESTAO` em compras.py) — confirmar. Recebimento parcial encerra a compra (o que faltou exige um novo pedido).
+- Instalação real: o .exe numa pasta sem banco cria dados FICTÍCIOS; falta um jeito de começar com o estoque real (o seed também cria os setores). Backup automático do `estoque.db`.
 - Ninguém é "estoquista" nos perfis: hoje só Gerente e Dono atendem a reposição. Envio menor que o pedido encerra o pedido; não há confirmação de recebimento pelo Bar.
 - Senha mínima de 4 caracteres (permite PIN no tablet): o dono aceita? Permissões padrão de cada perfil (Caixa e Gerente estornam item entregue).
 

@@ -17,13 +17,20 @@ import sys
 import threading
 from pathlib import Path
 
-# Os caminhos partem da pasta onde este arquivo está, então funciona
-# de qualquer lugar que o programa for aberto (inclusive depois de virar .exe).
-PASTA = Path(__file__).resolve().parent
-ARQUIVO_BANCO = PASTA / "estoque.db"
-ARQUIVO_SCHEMA = PASTA / "banco" / "schema.sql"
-ARQUIVO_SEED = PASTA / "banco" / "seed.sql"
-PASTA_MIGRACOES = PASTA / "banco" / "migracoes"
+# Duas pastas diferentes, porque o .exe se extrai numa pasta TEMPORÁRIA toda vez que abre:
+#   PASTA_RECURSOS: o que vem junto com o programa e só é lido (telas, CSS, arquivos .sql)
+#   PASTA_DADOS:    o que precisa continuar existindo (banco e chave), ao lado do .exe
+# Rodando pelo Python (python app.py), as duas são a própria pasta do projeto.
+if getattr(sys, "frozen", False):
+    PASTA_RECURSOS = Path(sys._MEIPASS)
+    PASTA_DADOS = Path(sys.executable).resolve().parent
+else:
+    PASTA_RECURSOS = PASTA_DADOS = Path(__file__).resolve().parent
+
+ARQUIVO_BANCO = PASTA_DADOS / "estoque.db"
+ARQUIVO_SCHEMA = PASTA_RECURSOS / "banco" / "schema.sql"
+ARQUIVO_SEED = PASTA_RECURSOS / "banco" / "seed.sql"
+PASTA_MIGRACOES = PASTA_RECURSOS / "banco" / "migracoes"
 
 # o Flask atende várias requisições ao mesmo tempo (uma "thread" para cada);
 # esta trava garante que só uma delas aplica migrações por vez

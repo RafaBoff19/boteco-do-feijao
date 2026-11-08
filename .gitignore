@@ -17,3 +17,7 @@ Thumbs.db
 
 # chave que assina o cookie de login (gerada sozinha; cada instalação tem a sua)
 chave_secreta.txt
+
+# gerados ao criar o executável
+build/
+dist/

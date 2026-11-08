@@ -6,10 +6,14 @@ Abre:  http://localhost:5000   (no próprio PC)
 
 Funciona sem internet: só precisa que os aparelhos estejam na mesma rede do bar.
 """
+import argparse
 import re
 import secrets
 import socket
 import sqlite3
+import sys
+import threading
+import webbrowser
 from datetime import timedelta
 from functools import wraps
 
@@ -25,14 +29,15 @@ import regras
 import reposicao
 from regras import ErroDeRegra
 
-app = Flask(__name__)
+app = Flask(__name__, template_folder=str(bd.PASTA_RECURSOS / "templates"),
+            static_folder=str(bd.PASTA_RECURSOS / "static"))
 
 
 def _chave_secreta():
     """A chave que "assina" o cookie de login. Se alguém souber a chave, consegue se passar
     por qualquer usuário; por isso ela é sorteada na primeira vez e guardada num arquivo
     fora do git (chave_secreta.txt). Guardar em arquivo faz o login sobreviver a reinícios."""
-    arquivo = bd.PASTA / "chave_secreta.txt"
+    arquivo = bd.PASTA_DADOS / "chave_secreta.txt"
     if not arquivo.exists():
         arquivo.write_text(secrets.token_hex(32), encoding="utf-8")
     return arquivo.read_text(encoding="utf-8").strip()
@@ -1345,11 +1350,50 @@ def ip_local():
         s.close()
 
 
-if __name__ == "__main__":
-    PORTA = 5000
+def _porta_ocupada(porta):
+    """True se já tem algo respondendo nessa porta (normalmente o próprio sistema, já aberto)."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.settimeout(1)
+        return s.connect_ex(("127.0.0.1", porta)) == 0
+
+
+def iniciar():
+    """Liga o servidor. É o que roda ao abrir o .exe ou ao usar python app.py."""
+    from waitress import serve    # servidor para uso real (o embutido no Flask é só para desenvolvimento)
+
+    leitor = argparse.ArgumentParser(description="Sistema de estoque - Buteco do Feijão")
+    leitor.add_argument("--porta", type=int, default=5000)
+    leitor.add_argument("--sem-navegador", action="store_true", help="não abre o navegador sozinho")
+    args = leitor.parse_args()
+
+    endereco = f"http://localhost:{args.porta}"
+    abrir_navegador = getattr(sys, "frozen", False) and not args.sem_navegador
+
+    if _porta_ocupada(args.porta):
+        print(f"\nO sistema já está aberto (a porta {args.porta} está em uso). Abrindo a tela dele...")
+        if abrir_navegador:
+            webbrowser.open(endereco)
+        return
+
+    bd.conectar().close()       # cria o banco na primeira vez e aplica as atualizações antes de atender
     print("\nSistema de estoque - Buteco do Feijão")
-    print(f"  Neste PC:             http://localhost:{PORTA}")
-    print(f"  Tablets e celulares:  http://{ip_local()}:{PORTA}   (mesmo Wi-Fi)")
-    print("  Para encerrar: Ctrl+C\n")
-    # debug=False de propósito: com host aberto na rede, o modo debug seria um risco.
-    app.run(host="0.0.0.0", port=PORTA, debug=False)
+    print(f"  Neste PC:             {endereco}")
+    print(f"  Tablets e celulares:  http://{ip_local()}:{args.porta}   (mesmo Wi-Fi)")
+    print(f"  Dados guardados em:   {bd.ARQUIVO_BANCO}")
+    print("\n  NÃO feche esta janela enquanto o bar estiver usando o sistema.")
+    print("  Para encerrar: feche esta janela ou aperte Ctrl+C.\n")
+    if abrir_navegador:
+        threading.Timer(1.5, webbrowser.open, args=[endereco]).start()
+    serve(app, host="0.0.0.0", port=args.porta, threads=8)
+
+
+if __name__ == "__main__":
+    try:
+        iniciar()
+    except Exception as erro:
+        if not getattr(sys, "frozen", False):
+            raise
+        # no .exe, sem isto a janela fecharia na hora e ninguém leria o erro
+        print(f"\nNão foi possível iniciar o sistema: {erro}")
+        print("Confira se a pasta do programa permite gravar arquivos (não use Arquivos de Programas).")
+        input("Aperte Enter para fechar...")
