@@ -1,0 +1,85 @@
+{% extends "cliente_base.html" %}
+{% block titulo %}Mesa {{ mesa.numero }}{% endblock %}
+{% block topo_direita %}<span class="detalhe">{{ d.comanda.identificacao }} · Mesa {{ mesa.numero }}</span>{% endblock %}
+{% block conteudo %}
+
+<section aria-label="Minha comanda">
+  <div class="titulo-linha">
+    <h1>Minha comanda</h1>
+    <a class="botao botao-leve botao-pequeno" href="{{ url_for('cliente_mesa', codigo=mesa.codigo) }}">Atualizar</a>
+  </div>
+  {% if not d.itens %}<p class="vazio">Você ainda não pediu nada. Escolha no cardápio abaixo.</p>{% endif %}
+  <ul class="itens-pedido">
+    {% for i in d.itens %}
+    {% set aguardando = i.origem == 'cliente' and i.confirmado_em is none and i.status == 'pedido' %}
+    <li class="pedido pedido-{{ i.status }} {{ 'pedido-aguardando' if aguardando }}">
+      <div class="pedido-topo">
+        <strong>{{ i.quantidade }}× {{ i.produto }}</strong>
+        {% if aguardando %}<span class="selo selo-tipo">Aguardando garçom</span>
+        {% elif i.status == 'pedido' %}<span class="selo selo-baixo">Confirmado · a caminho</span>
+        {% elif i.status == 'entregue' %}<span class="selo selo-ok">Entregue</span>
+        {% else %}<span class="selo selo-inativo">Cancelado</span>{% endif %}
+        <span class="valor">{{ (i.quantidade * i.preco_unitario)|moeda }}</span>
+      </div>
+      {% if i.escolhas or i.observacao %}
+      <div class="detalhe">{{ i.escolhas or '' }}{% if i.escolhas and i.observacao %} · {% endif %}{% if i.observacao %}<em>{{ i.observacao }}</em>{% endif %}</div>
+      {% endif %}
+      {% if aguardando %}
+      <form method="post" action="{{ url_for('cliente_desistir', codigo=mesa.codigo, item_id=i.id) }}" class="acoes-pedido">
+        <button type="submit" class="botao botao-leve botao-pequeno">Desistir</button>
+      </form>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  <p class="total-linha">Total: <strong>{{ d.total|moeda }}</strong></p>
+</section>
+
+<section id="cardapio" aria-label="Cardápio">
+  <h2>Cardápio</h2>
+  {% for categoria, grupo in produtos|groupby('categoria') %}
+  <h3 class="cat-cardapio">{{ categoria }}</h3>
+  <div class="itens">
+    {% for p in grupo %}
+    <form method="post" action="{{ url_for('cliente_pedir', codigo=mesa.codigo) }}" class="item item-add">
+      <input type="hidden" name="produto_id" value="{{ p.id }}">
+      <div class="item-topo"><h3>{{ p.nome }}</h3></div>
+      <p class="preco">{{ p.preco_vigente|moeda }}
+        {% if p.origem_preco == 'promocao' %}<span class="selo selo-baixo">Promoção</span>{% endif %}</p>
+      {% for grupo_esc, opcoes in p.opcoes.items() %}
+      <div class="campo">
+        <label for="e-{{ p.id }}-{{ loop.index }}">Escolha: {{ grupo_esc }}</label>
+        <select id="e-{{ p.id }}-{{ loop.index }}" name="escolha_{{ grupo_esc }}" required>
+          <option value="">Selecione…</option>
+          {% for o in opcoes %}<option value="{{ o.insumo_id }}">{{ o.insumo }}</option>{% endfor %}
+        </select>
+      </div>
+      {% endfor %}
+      <div class="linha">
+        <div class="campo campo-curto">
+          <label for="q-{{ p.id }}">Qtd.</label>
+          <select id="q-{{ p.id }}" name="quantidade">
+            {% for n in range(1, max_qtd + 1) %}<option value="{{ n }}">{{ n }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="campo">
+          <label for="o-{{ p.id }}">Observação <span class="opc">(opcional)</span></label>
+          <input type="text" id="o-{{ p.id }}" name="observacao" maxlength="120" autocomplete="off" placeholder="ex.: sem gelo">
+        </div>
+      </div>
+      <button class="botao" type="submit">Pedir</button>
+    </form>
+    {% endfor %}
+  </div>
+  {% endfor %}
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+  // Atualiza o status dos pedidos sozinho, mas só se a pessoa estiver no topo e sem digitar.
+  setInterval(function () {
+    var a = document.activeElement;
+    if ((!a || a === document.body) && window.scrollY < 200) { location.reload(); }
+  }, 20000);
+</script>
+{% endblock %}

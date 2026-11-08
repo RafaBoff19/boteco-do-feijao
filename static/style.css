@@ -231,3 +231,27 @@ nav a .contador { font-size: .75rem; padding: 0 .45rem; }
 .cancelar-compra { margin: 1.5rem 0; }
 .cancelar-compra summary { cursor: pointer; color: var(--suave); font-weight: 600; min-height: 44px; display: flex; align-items: center; }
 .cancelar-compra form { margin-top: .5rem; }
+
+/* ---------- QR Code: cliente, confirmação e mesas (Passo 10) ---------- */
+.pedido-aguardando { border-left-color: var(--marca); background: var(--marca-fundo); }
+.confirmar { margin: 0 0 1.5rem; }
+.confirmar h2 { color: var(--marca); }
+.cat-cardapio { margin: 1.2rem 0 .6rem; color: var(--suave); font-size: .95rem; text-transform: uppercase; letter-spacing: .04em; }
+body.cliente .topo-in { flex-wrap: nowrap; }
+body.cliente .form-login .selo { display: inline-block; margin: 0 0 .6rem; }
+
+.qr-grade { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); margin-top: 1rem; }
+.qr-cartao { background: var(--surface); border: 1px solid var(--borda); border-radius: var(--raio); padding: 1rem; text-align: center; }
+.qr-titulo { font-size: 1.6rem; font-weight: 800; margin: 0 0 .4rem; }
+.qr-img svg { width: 100%; max-width: 200px; height: auto; background: #fff; border-radius: 8px; }
+.qr-texto { margin: .4rem 0 0; font-size: .9rem; }
+.qr-cartao .acoes { justify-content: center; }
+
+@media print {
+  .topo, .rodape, .msg, .nao-imprimir { display: none !important; }
+  body, .qr-cartao { background: #fff !important; color: #000 !important; }
+  .conteudo { max-width: none; padding: 0; }
+  .qr-grade { grid-template-columns: repeat(3, 1fr); gap: 8mm; }
+  .qr-cartao { border: 1px dashed #999; break-inside: avoid; border-radius: 0; }
+  .qr-img svg { max-width: 50mm; }
+}

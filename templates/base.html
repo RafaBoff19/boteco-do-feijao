@@ -13,12 +13,13 @@
       {% if usuario %}
       <nav>
         {% if pode('estoque.ver') %}<a href="{{ url_for('estoque') }}" class="{{ 'ativo' if request.endpoint == 'estoque' }}">Estoque</a>{% endif %}
-        {% if pode('pedido.registrar', 'caixa.operar') %}<a href="{{ url_for('comandas') }}" class="{{ 'ativo' if request.endpoint in ('comandas', 'comanda') }}">Comandas</a>{% endif %}
+        {% if pode('pedido.registrar', 'caixa.operar') %}<a href="{{ url_for('comandas') }}" class="{{ 'ativo' if request.endpoint in ('comandas', 'comanda') }}">Comandas{% if qr_aviso %} <span class="contador" title="Pedidos do QR Code aguardando confirmação">{{ qr_aviso }}</span>{% endif %}</a>{% endif %}
         {% if pode('pedido.entregar') %}<a href="{{ url_for('entregas') }}" class="{{ 'ativo' if request.endpoint == 'entregas' }}">Entregas</a>{% endif %}
         {% if pode('estoque.movimentar', 'estoque.perda') %}<a href="{{ url_for('movimentar') }}" class="{{ 'ativo' if request.endpoint == 'movimentar' }}">{{ 'Movimentar' if pode('estoque.movimentar') else 'Perda' }}</a>{% endif %}
         {% if pode('estoque.ver') %}<a href="{{ url_for('historico') }}" class="{{ 'ativo' if request.endpoint == 'historico' }}">Histórico</a>{% endif %}
         {% if pode('compra.solicitar', 'compra.aprovar', 'estoque.movimentar') %}<a href="{{ url_for('compras_lista') }}" class="{{ 'ativo' if request.endpoint and request.endpoint.startswith('compra') }}">Compras{% if compras_aviso %} <span class="contador">{{ compras_aviso }}</span>{% endif %}</a>{% endif %}
         {% if pode('produto.gerir', 'fornecedor.gerir') %}<a href="{{ url_for('cadastros_inicio') }}" class="{{ 'ativo' if request.endpoint and request.endpoint.startswith('cadastro') }}">Cadastros</a>{% endif %}
+        {% if pode('mesa.gerir') %}<a href="{{ url_for('mesas_lista') }}" class="{{ 'ativo' if request.endpoint == 'mesas_lista' }}">Mesas</a>{% endif %}
         {% if pode('usuario.gerir') %}<a href="{{ url_for('usuarios') }}" class="{{ 'ativo' if request.endpoint in ('usuarios', 'usuario_editar', 'perfis') }}">Usuários</a>{% endif %}
       </nav>
       <div class="quem">

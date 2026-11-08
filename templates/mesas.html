@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block titulo %}Mesas e QR Codes{% endblock %}
+{% block conteudo %}
+
+<div class="titulo-linha nao-imprimir">
+  <h1>Mesas e QR Codes</h1>
+  {% if lista %}<button type="button" class="botao" onclick="window.print()">Imprimir QR Codes</button>{% endif %}
+</div>
+
+<form method="post" class="form nao-imprimir" novalidate>
+  <h2>Quantas mesas o bar tem?</h2>
+  <div class="linha">
+    <div class="campo campo-curto">
+      <label for="quantidade">Mesas</label>
+      <input id="quantidade" name="quantidade" type="text" inputmode="numeric" pattern="[0-9]*" value="{{ lista|length }}" autocomplete="off">
+    </div>
+  </div>
+  <button type="submit" class="botao">Salvar</button>
+  <p class="dica">Os QR Codes apontam para <strong>{{ base }}</strong>. Se o IP do PC mudar, os QR param de funcionar:
+    peça para fixar o IP do PC no roteador (IP reservado/estático) antes de imprimir.</p>
+  <p class="dica">O cliente precisa estar no <strong>Wi-Fi do bar</strong>. O ideal é uma rede só para clientes, que alcance o PC apenas pela porta do sistema.</p>
+</form>
+
+{% if not lista %}<p class="vazio nao-imprimir">Nenhuma mesa cadastrada.</p>{% endif %}
+
+<div class="qr-grade">
+  {% for m in lista %}
+  <article class="qr-cartao">
+    <p class="qr-titulo">Mesa {{ m.numero }}</p>
+    <div class="qr-img" role="img" aria-label="QR Code da mesa {{ m.numero }}">{{ m.svg|safe }}</div>
+    <p class="qr-texto">Aponte a câmera, abra sua comanda e peça pelo celular<br><small>(conecte-se ao Wi-Fi do bar)</small></p>
+    <div class="acoes nao-imprimir">
+      <a class="botao botao-leve botao-pequeno" href="{{ m.link }}" target="_blank" rel="noopener">Abrir</a>
+      <form method="post" onsubmit="return confirm('Trocar o código da mesa {{ m.numero }}? O QR impresso hoje vai parar de funcionar.');">
+        <input type="hidden" name="acao" value="trocar">
+        <input type="hidden" name="numero" value="{{ m.numero }}">
+        <button type="submit" class="botao botao-leve botao-pequeno">Trocar código</button>
+      </form>
+    </div>
+  </article>
+  {% endfor %}
+</div>
+{% endblock %}

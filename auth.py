@@ -19,6 +19,7 @@ from regras import ErroDeRegra
 
 PERFIL_DONO = "Dono"
 SENHA_NAO_DEFINIDA = "DEFINIR_NO_PRIMEIRO_ACESSO"   # valor que o seed coloca no usuário admin
+LOGIN_SISTEMA = "qrcode"   # usuário que "assina" os pedidos do QR Code: escondido da tela de Usuários
 TAMANHO_MINIMO_SENHA = 4                             # 4 permite um PIN no tablet; o Dono deve usar mais
 
 # Proteção contra "chutar" senhas: depois de 5 erros seguidos, o login fica bloqueado 5 minutos.
@@ -224,13 +225,15 @@ def listar_usuarios(con):
         """SELECT u.id, u.nome, u.login, u.ativo, u.trocar_senha, u.ultimo_acesso, u.perfil_id,
                   p.nome AS perfil, (u.senha_hash = ?) AS sem_senha
            FROM usuario u JOIN perfil p ON p.id = u.perfil_id
-           ORDER BY u.ativo DESC, p.id, u.nome""", (SENHA_NAO_DEFINIDA,)).fetchall()
+           WHERE u.login <> ?
+           ORDER BY u.ativo DESC, p.id, u.nome""", (SENHA_NAO_DEFINIDA, LOGIN_SISTEMA)).fetchall()
 
 
 def buscar_usuario(con, usuario_id):
     return con.execute(
         """SELECT u.id, u.nome, u.login, u.ativo, u.perfil_id, p.nome AS perfil
-           FROM usuario u JOIN perfil p ON p.id = u.perfil_id WHERE u.id = ?""", (usuario_id,)).fetchone()
+           FROM usuario u JOIN perfil p ON p.id = u.perfil_id WHERE u.id = ? AND u.login <> ?""",
+        (usuario_id, LOGIN_SISTEMA)).fetchone()
 
 
 def criar_usuario(con, nome, login, senha, perfil_id, quem):

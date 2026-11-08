@@ -4,6 +4,37 @@
 
 <div class="titulo-linha"><h1>Comandas</h1></div>
 
+{% if aguardando %}
+<section class="confirmar" aria-label="Pedidos do QR Code aguardando confirmação">
+  <h2>Pedidos do QR Code: confirme na mesa <span class="contador">{{ aguardando|length }}</span></h2>
+  <ul class="itens-pedido">
+    {% for i in aguardando %}
+    <li class="pedido pedido-aguardando">
+      <div class="pedido-topo">
+        <strong>{{ i.quantidade }}× {{ i.produto }}</strong>
+        <span class="detalhe">{% if i.mesa %}Mesa {{ i.mesa }} · {% endif %}{{ i.identificacao }} · às {{ i.criado_em[11:16] }}</span>
+      </div>
+      {% if i.escolhas or i.observacao %}
+      <div class="detalhe">{{ i.escolhas or '' }}{% if i.escolhas and i.observacao %} · {% endif %}{% if i.observacao %}<em>{{ i.observacao }}</em>{% endif %}</div>
+      {% endif %}
+      <div class="acoes-pedido">
+        <form method="post" action="{{ url_for('item_confirmar', item_id=i.id) }}">
+          <input type="hidden" name="voltar" value="{{ request.full_path }}">
+          <button class="botao botao-entregue" type="submit">CONFIRMAR</button>
+        </form>
+        <form method="post" action="{{ url_for('item_cancelar', item_id=i.id) }}">
+          <input type="hidden" name="voltar" value="{{ request.full_path }}">
+          <input type="hidden" name="motivo" value="Recusado pelo garçom (pedido do QR Code)">
+          <button class="botao botao-leve botao-pequeno" type="submit">Recusar</button>
+        </form>
+        <a class="botao botao-leve botao-pequeno" href="{{ url_for('comanda', comanda_id=i.comanda_id) }}">Ver comanda</a>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
 {% if pode('pedido.registrar') %}
 <form method="post" class="form form-larga">
   <h2>Abrir comanda</h2>
@@ -33,6 +64,7 @@
     <div class="card-topo">
       <h3>{{ c.identificacao }}</h3>
       {% if c.status != 'aberta' %}<span class="selo selo-inativo">{{ c.status|capitalize }}</span>
+      {% elif c.aguardando %}<span class="selo selo-tipo">{{ c.aguardando }} p/ confirmar</span>
       {% elif c.pendentes %}<span class="selo selo-baixo">{{ c.pendentes }} a entregar</span>{% endif %}
     </div>
     <p class="detalhe">{% if c.mesa %}Mesa {{ c.mesa }} · {% endif %}aberta {{ c.aberta_em[11:16] }} por {{ c.aberta_por_nome }}</p>
@@ -40,4 +72,13 @@
   </a>
   {% endfor %}
 </div>
+{% endblock %}
+{% block scripts %}
+<script>
+  // Recarrega para ver pedidos novos do QR Code, mas não enquanto alguém está digitando.
+  setInterval(function () {
+    var a = document.activeElement;
+    if ((!a || a === document.body) && window.scrollY < 200) { location.reload(); }
+  }, 20000);
+</script>
 {% endblock %}

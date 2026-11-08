@@ -13,12 +13,13 @@ import sqlite3
 from datetime import timedelta
 from functools import wraps
 
-from flask import Flask, abort, flash, g, redirect, render_template, request, session, url_for
+from flask import Flask, abort, flash, g, make_response, redirect, render_template, request, session, url_for
 
 import auth
 import bd
 import cadastros
 import compras
+import mesas
 import pedidos
 import regras
 from regras import ErroDeRegra
@@ -76,7 +77,8 @@ def fechar_conexao(_erro):
 # ---------------------------------------------------------------------
 
 # páginas que abrem sem estar logado
-PAGINAS_PUBLICAS = {"login", "primeiro_acesso", "static"}
+PAGINAS_PUBLICAS = {"login", "primeiro_acesso", "static",
+                    "cliente_mesa", "cliente_pedir", "cliente_desistir"}   # cardápio do QR Code
 # páginas liberadas para quem precisa trocar a senha antes de continuar
 PAGINAS_TROCA_SENHA = {"minha_conta", "logout", "static"}
 
@@ -109,7 +111,8 @@ def pagina_inicial():
                              (("pedido.registrar", "caixa.operar"), "comandas"),
                              (("pedido.entregar",), "entregas"),
                              (("produto.gerir", "fornecedor.gerir"), "cadastros_inicio"),
-                             (("usuario.gerir",), "usuarios")]:
+                             (("usuario.gerir",), "usuarios"),
+                             (("mesa.gerir",), "mesas_lista")]:
         if pode(*permissoes):
             return url_for(tela)
     return url_for("minha_conta")
@@ -136,7 +139,15 @@ def conferir_login():
 
 @app.context_processor
 def para_os_templates():
-    return {"usuario": g.get("usuario"), "pode": pode, "compras_aviso": _compras_aviso()}
+    return {"usuario": g.get("usuario"), "pode": pode, "compras_aviso": _compras_aviso(),
+            "qr_aviso": _qr_aviso()}
+
+
+def _qr_aviso():
+    """Número no menu Comandas: pedidos do QR Code esperando um garçom confirmar."""
+    if g.get("usuario") is None or not pode("pedido.registrar"):
+        return 0
+    return len(pedidos.itens_aguardando(con()))
 
 
 def _compras_aviso():
@@ -735,7 +746,8 @@ def comandas():
             flash(str(e), "erro")
     ver = request.args.get("ver", "abertas")
     lista = pedidos.listar_comandas(c, "aberta" if ver == "abertas" else None)
-    return render_template("comandas.html", lista=lista, ver=ver)
+    aguardando = pedidos.itens_aguardando(c) if pode("pedido.registrar") else []
+    return render_template("comandas.html", lista=lista, ver=ver, aguardando=aguardando)
 
 
 @app.route("/comandas/<int:comanda_id>")
@@ -957,6 +969,133 @@ def perfis():
             flash(str(e), "erro")
     return render_template("perfis.html", perfis=auth.listar_perfis(c), permissoes=auth.listar_permissoes(c),
                            sou_dono=(g.usuario["perfil"] == auth.PERFIL_DONO))
+
+
+# ---------------------------------------------------------------------
+# Pedidos pelo QR Code (Passo 10)
+#   Cliente (sem login):  /m/<codigo>  ->  abre a comanda, vê o cardápio, pede
+#   Equipe:               confirma em Comandas; cadastra mesas e imprime QR em /mesas
+# ---------------------------------------------------------------------
+
+def _comanda_do_cliente(mesa):
+    """A comanda que ESTE celular abriu nesta mesa (guardada no cookie assinado), se ainda estiver aberta."""
+    cid = session.get("cliente", {}).get(mesa["codigo"])
+    if cid is None:
+        return None
+    c = con().execute("SELECT * FROM comanda WHERE id = ?", (cid,)).fetchone()
+    if c is None or c["status"] != "aberta" or c["mesa"] != mesa["numero"]:
+        return None
+    return c
+
+
+def _mesa_ou_404(codigo):
+    mesa = mesas.mesa_por_codigo(con(), codigo)
+    if mesa is None:
+        abort(make_response(render_template("cliente_invalido.html"), 404))
+    return mesa
+
+
+@app.route("/m/<codigo>", methods=["GET", "POST"])
+def cliente_mesa(codigo):
+    mesa = _mesa_ou_404(codigo)
+    comanda_cli = _comanda_do_cliente(mesa)
+    if request.method == "POST" and comanda_cli is None:
+        try:
+            cid = pedidos.abrir_comanda_cliente(con(), mesa["numero"], request.form.get("nome"))
+            meus = dict(session.get("cliente", {}))
+            meus[mesa["codigo"]] = cid
+            session["cliente"] = meus
+            session.permanent = True
+            return redirect(url_for("cliente_mesa", codigo=codigo) + "#cardapio")
+        except ErroDeRegra as e:
+            flash(str(e), "erro")
+    if comanda_cli is None:
+        return render_template("cliente_inicio.html", mesa=mesa)
+
+    c = con()
+    produtos = []
+    for p in cadastros.listar_produtos(c):
+        p = dict(p)
+        p["opcoes"] = pedidos.opcoes_do_produto(c, p["id"])
+        produtos.append(p)
+    return render_template("cliente_mesa.html", mesa=mesa, d=pedidos.dados_comanda(c, comanda_cli["id"]),
+                           produtos=produtos, max_qtd=pedidos.MAX_QTD_CLIENTE)
+
+
+@app.post("/m/<codigo>/pedir")
+def cliente_pedir(codigo):
+    mesa = _mesa_ou_404(codigo)
+    comanda_cli = _comanda_do_cliente(mesa)
+    if comanda_cli is None:
+        flash("Sua comanda foi fechada. Abra uma nova para continuar pedindo.", "aviso")
+        return redirect(url_for("cliente_mesa", codigo=codigo))
+    f = request.form
+    escolhas = {k[len("escolha_"):]: v for k, v in f.items() if k.startswith("escolha_")}
+    try:
+        pedidos.pedir_pelo_qrcode(con(), comanda_cli["id"], _inteiro(f.get("produto_id"), "Produto"),
+                                  _inteiro(f.get("quantidade"), "Quantidade") or 1,
+                                  escolhas=escolhas, observacao=f.get("observacao"))
+        flash("Pedido enviado! Um garçom vai confirmar em instantes.", "ok")
+        return redirect(url_for("cliente_mesa", codigo=codigo))
+    except ErroDeRegra as e:
+        flash(str(e), "erro")
+    return redirect(url_for("cliente_mesa", codigo=codigo) + "#cardapio")
+
+
+@app.post("/m/<codigo>/desistir/<int:item_id>")
+def cliente_desistir(codigo, item_id):
+    mesa = _mesa_ou_404(codigo)
+    comanda_cli = _comanda_do_cliente(mesa)
+    if comanda_cli is not None:
+        try:
+            pedidos.cliente_desistir(con(), comanda_cli["id"], item_id)
+            flash("Pedido retirado.", "ok")
+        except ErroDeRegra as e:
+            flash(str(e), "erro")
+    return redirect(url_for("cliente_mesa", codigo=codigo))
+
+
+@app.post("/itens/<int:item_id>/confirmar")
+@requer("pedido.registrar")
+def item_confirmar(item_id):
+    try:
+        pedidos.confirmar_item(con(), item_id, uid())
+        flash("Pedido confirmado: foi para a fila de Entregas.", "ok")
+    except ErroDeRegra as e:
+        flash(str(e), "erro")
+    return _voltar(url_for("comandas"))
+
+
+def _endereco_base():
+    """Endereço que vai dentro do QR Code. Se o Dono abriu o sistema como 'localhost',
+    troca pelo IP do PC na rede (o celular do cliente não chega em 'localhost')."""
+    host = request.host
+    nome, _, porta = host.partition(":")
+    if nome in ("localhost", "127.0.0.1", "::1", "[::1]"):
+        host = f"{ip_local()}:{porta or 80}"
+    return f"http://{host}"
+
+
+@app.route("/mesas", methods=["GET", "POST"])
+@requer("mesa.gerir")
+def mesas_lista():
+    c = con()
+    if request.method == "POST":
+        try:
+            if request.form.get("acao") == "trocar":
+                numero = _inteiro(request.form.get("numero"), "Mesa")
+                mesas.trocar_codigo(c, numero)
+                flash(f"Código da mesa {numero} trocado. O QR antigo parou de funcionar: imprima o novo.", "aviso")
+            else:
+                mesas.definir_quantidade(c, _inteiro(request.form.get("quantidade"), "Quantidade de mesas"))
+                flash("Mesas atualizadas.", "ok")
+            return redirect(url_for("mesas_lista"))
+        except ErroDeRegra as e:
+            flash(str(e), "erro")
+    base = _endereco_base()
+    lista = [{"numero": m["numero"], "link": f"{base}/m/{m['codigo']}",
+              "svg": mesas.qr_svg(f"{base}/m/{m['codigo']}")} for m in mesas.listar_mesas(c)]
+    return render_template("mesas.html", lista=lista, base=base)
 
 
 # ---------------------------------------------------------------------

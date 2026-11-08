@@ -1,0 +1,14 @@
+{% extends "cliente_base.html" %}
+{% block titulo %}Mesa {{ mesa.numero }}{% endblock %}
+{% block conteudo %}
+<form method="post" class="form form-login" novalidate>
+  <p class="selo selo-tipo selo-grande">Mesa {{ mesa.numero }}</p>
+  <h1>Bem-vindo!</h1>
+  <p class="dica">Abra a sua comanda para pedir pelo celular. Cada pedido é confirmado por um garçom antes de ir para o bar.</p>
+  <div class="campo">
+    <label for="nome">Seu nome</label>
+    <input id="nome" name="nome" type="text" maxlength="40" required autocomplete="given-name" autofocus>
+  </div>
+  <button type="submit" class="botao botao-grande">Abrir minha comanda</button>
+</form>
+{% endblock %}

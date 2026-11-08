@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>{% block titulo %}Cardápio{% endblock %} · Buteco do Feijão</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="cliente">
+  <header class="topo">
+    <div class="topo-in">
+      <span class="marca">Buteco do Feijão</span>
+      {% block topo_direita %}{% endblock %}
+    </div>
+  </header>
+  <main class="conteudo">
+    {% with mensagens = get_flashed_messages(with_categories=true) %}
+      {% for categoria, texto in mensagens %}
+        <div class="msg msg-{{ categoria }}" role="{{ 'alert' if categoria != 'ok' else 'status' }}">{{ texto }}</div>
+      {% endfor %}
+    {% endwith %}
+    {% block conteudo %}{% endblock %}
+  </main>
+  <footer class="rodape">O pagamento é feito no caixa. Beba com moderação. Venda proibida para menores de 18 anos.</footer>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

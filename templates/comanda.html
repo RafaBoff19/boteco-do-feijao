@@ -19,21 +19,30 @@
   {% if not d.itens %}<p class="vazio">Nenhum item ainda.</p>{% endif %}
   <ul class="itens-pedido">
     {% for i in d.itens %}
-    <li class="pedido pedido-{{ i.status }}">
+    {% set aguardando = i.origem == 'cliente' and i.confirmado_em is none and i.status == 'pedido' %}
+    <li class="pedido pedido-{{ i.status }} {{ 'pedido-aguardando' if aguardando }}">
       <div class="pedido-topo">
         <strong>{{ i.quantidade }}× {{ i.produto }}</strong>
         <span class="selo {{ {'pedido': 'selo-baixo', 'entregue': 'selo-ok', 'cancelado': 'selo-inativo'}[i.status] }}">
-          {{ {'pedido': 'A entregar', 'entregue': 'Entregue', 'cancelado': 'Cancelado'}[i.status] }}</span>
+          {{ 'Aguardando confirmação' if aguardando else {'pedido': 'A entregar', 'entregue': 'Entregue', 'cancelado': 'Cancelado'}[i.status] }}</span>
+        {% if i.origem == 'cliente' %}<span class="selo selo-tipo">QR Code</span>{% endif %}
         <span class="valor">{{ (i.quantidade * i.preco_unitario)|moeda }}</span>
       </div>
       {% if i.escolhas or i.observacao %}
       <div class="detalhe">{% if i.escolhas %}{{ i.escolhas }}{% endif %}{% if i.escolhas and i.observacao %} · {% endif %}{% if i.observacao %}<em>{{ i.observacao }}</em>{% endif %}</div>
       {% endif %}
       {% if i.status == 'cancelado' and i.motivo_cancelamento %}<div class="detalhe">Motivo: {{ i.motivo_cancelamento }}</div>{% endif %}
-      {% set pode_entregar = i.status == 'pedido' and pode('pedido.entregar') %}
+      {% set pode_confirmar = aguardando and pode('pedido.registrar') %}
+      {% set pode_entregar = i.status == 'pedido' and not aguardando and pode('pedido.entregar') %}
       {% set pode_cancelar = pode('pedido.estornar') if i.status == 'entregue' else pode('pedido.registrar', 'pedido.entregar') %}
-      {% if aberta and i.status != 'cancelado' and (pode_entregar or pode_cancelar) %}
+      {% if aberta and i.status != 'cancelado' and (pode_confirmar or pode_entregar or pode_cancelar) %}
       <div class="acoes-pedido">
+        {% if pode_confirmar %}
+        <form method="post" action="{{ url_for('item_confirmar', item_id=i.id) }}">
+          <input type="hidden" name="voltar" value="{{ request.path }}">
+          <button class="botao botao-entregue" type="submit">CONFIRMAR</button>
+        </form>
+        {% endif %}
         {% if pode_entregar %}
         <form method="post" action="{{ url_for('item_entregar', item_id=i.id) }}">
           <input type="hidden" name="voltar" value="{{ request.path }}">

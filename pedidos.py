@@ -19,6 +19,14 @@ from regras import ErroDeRegra
 SETOR_PRINCIPAL = "Bar"
 SETOR_RESERVA = "Estoque"
 
+# Pedidos pelo QR Code (Passo 10)
+LOGIN_QRCODE = "qrcode"          # usuário de sistema (inativo) que "assina" o que o cliente faz
+MAX_QTD_CLIENTE = 10             # o cliente pede no máximo 10 unidades por vez
+MAX_AGUARDANDO_CLIENTE = 10      # e no máximo 10 itens esperando o garçom (evita trote/spam)
+
+# item pedido pelo cliente e que o garçom ainda não confirmou
+SQL_AGUARDANDO = "(pi.origem = 'cliente' AND pi.confirmado_em IS NULL AND pi.status = 'pedido')"
+
 
 def _comanda(con, comanda_id):
     c = con.execute("SELECT * FROM comanda WHERE id = ?", (comanda_id,)).fetchone()
@@ -56,11 +64,18 @@ def abrir_comanda(con, identificacao, usuario_id, mesa=None):
     return cur.lastrowid
 
 
-def adicionar_item(con, comanda_id, produto_id, quantidade, usuario_id, escolhas=None, observacao=None):
-    """escolhas: {grupo: insumo_id} — obrigatório para cada grupo de escolha da receita."""
+def adicionar_item(con, comanda_id, produto_id, quantidade, usuario_id, escolhas=None, observacao=None,
+                   origem="equipe"):
+    """escolhas: {grupo: insumo_id} — obrigatório para cada grupo de escolha da receita.
+
+    origem='cliente' é usado só por pedir_pelo_qrcode: o item nasce aguardando o garçom.
+    """
     if isinstance(quantidade, bool) or not isinstance(quantidade, int) or quantidade < 1:
         raise ErroDeRegra("Quantidade inválida: use um número inteiro a partir de 1.")
-    regras._validar_usuario(con, usuario_id)
+    if origem not in ("equipe", "cliente"):
+        raise ErroDeRegra("Origem do pedido inválida.")
+    if origem == "equipe":
+        regras._validar_usuario(con, usuario_id)   # o usuário do QR Code é inativo de propósito
     c = _comanda(con, comanda_id)
     if c["status"] != "aberta":
         raise ErroDeRegra("Esta comanda não está aberta.")
@@ -98,9 +113,11 @@ def adicionar_item(con, comanda_id, produto_id, quantidade, usuario_id, escolhas
     obs = (observacao or "").strip() or None
     with con:
         cur = con.execute(
-            """INSERT INTO pedido_item (comanda_id, produto_id, quantidade, preco_unitario, escolhas, observacao, criado_por)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (comanda_id, produto_id, quantidade, preco, ", ".join(nomes_escolhidos) or None, obs, usuario_id))
+            """INSERT INTO pedido_item (comanda_id, produto_id, quantidade, preco_unitario, escolhas, observacao,
+                                        criado_por, origem)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (comanda_id, produto_id, quantidade, preco, ", ".join(nomes_escolhidos) or None, obs, usuario_id,
+             origem))
         item_id = cur.lastrowid
         con.executemany(
             "INSERT INTO pedido_item_consumo (pedido_item_id, insumo_id, quantidade) VALUES (?, ?, ?)",
@@ -123,6 +140,8 @@ def entregar_item(con, item_id, usuario_id):
         raise ErroDeRegra("Este item já foi entregue (a baixa já foi feita).")
     if item["status"] == "cancelado":
         raise ErroDeRegra("Este item foi cancelado.")
+    if item["origem"] == "cliente" and item["confirmado_em"] is None:
+        raise ErroDeRegra("Este pedido do QR Code ainda não foi confirmado pelo garçom.")
     if _comanda(con, item["comanda_id"])["status"] != "aberta":
         raise ErroDeRegra("A comanda deste item não está aberta.")
     bar = regras._buscar_setor(con, SETOR_PRINCIPAL)
@@ -231,6 +250,8 @@ def total_comanda(con, comanda_id):
 def listar_comandas(con, status="aberta"):
     sql = """SELECT c.*, u.nome AS aberta_por_nome,
                     (SELECT COUNT(*) FROM pedido_item WHERE comanda_id = c.id AND status = 'pedido') AS pendentes,
+                    (SELECT COUNT(*) FROM pedido_item pi WHERE pi.comanda_id = c.id AND """ + SQL_AGUARDANDO + """)
+                        AS aguardando,
                     (SELECT COALESCE(SUM(quantidade * preco_unitario), 0) FROM pedido_item
                       WHERE comanda_id = c.id AND status <> 'cancelado') AS total
              FROM comanda c JOIN usuario u ON u.id = c.aberta_por"""
@@ -254,7 +275,8 @@ def itens_pendentes(con):
     return con.execute(
         """SELECT pi.*, p.nome AS produto, c.identificacao, c.mesa
            FROM pedido_item pi JOIN produto p ON p.id = pi.produto_id JOIN comanda c ON c.id = pi.comanda_id
-           WHERE pi.status = 'pedido' AND c.status = 'aberta' ORDER BY pi.criado_em, pi.id""").fetchall()
+           WHERE pi.status = 'pedido' AND c.status = 'aberta' AND NOT """ + SQL_AGUARDANDO + """
+           ORDER BY COALESCE(pi.confirmado_em, pi.criado_em), pi.id""").fetchall()
 
 
 def opcoes_do_produto(con, produto_id):
@@ -264,3 +286,77 @@ def opcoes_do_produto(con, produto_id):
         if r["grupo_escolha"] is not None:
             grupos.setdefault(r["grupo_escolha"], []).append({"insumo_id": r["insumo_id"], "insumo": r["insumo"]})
     return grupos
+
+
+# ---------------------------------------------------------------------
+# Pedidos pelo QR Code (Passo 10)
+# O cliente não tem login: o que ele faz fica no nome do usuário de sistema
+# "Cliente (QR Code)", e cada item espera um garçom confirmar.
+# ---------------------------------------------------------------------
+def usuario_qrcode(con):
+    r = con.execute("SELECT id FROM usuario WHERE login = ?", (LOGIN_QRCODE,)).fetchone()
+    if r is None:
+        raise ErroDeRegra("Usuário do QR Code não existe no banco (migração 005).")
+    return r[0]
+
+
+def abrir_comanda_cliente(con, mesa, nome):
+    """O cliente abre a própria comanda na mesa do QR Code."""
+    nome = " ".join((nome or "").split())
+    if not nome:
+        raise ErroDeRegra("Digite o seu nome para abrir a comanda.")
+    if len(nome) > 40:
+        raise ErroDeRegra("Nome muito longo: use até 40 letras.")
+    with con:
+        cur = con.execute("INSERT INTO comanda (identificacao, mesa, aberta_por) VALUES (?, ?, ?)",
+                          (nome, mesa, usuario_qrcode(con)))
+    return cur.lastrowid
+
+
+def pedir_pelo_qrcode(con, comanda_id, produto_id, quantidade, escolhas=None, observacao=None):
+    if isinstance(quantidade, bool) or not isinstance(quantidade, int) or not 1 <= quantidade <= MAX_QTD_CLIENTE:
+        raise ErroDeRegra(f"Escolha de 1 a {MAX_QTD_CLIENTE} unidades.")
+    if len((observacao or "").strip()) > 120:
+        raise ErroDeRegra("Observação muito longa: use até 120 letras.")
+    esperando = con.execute(
+        f"SELECT COUNT(*) FROM pedido_item pi WHERE pi.comanda_id = ? AND {SQL_AGUARDANDO}", (comanda_id,)).fetchone()[0]
+    if esperando >= MAX_AGUARDANDO_CLIENTE:
+        raise ErroDeRegra("Você já tem vários pedidos esperando o garçom. Aguarde a confirmação para pedir mais.")
+    return adicionar_item(con, comanda_id, produto_id, quantidade, usuario_qrcode(con),
+                          escolhas=escolhas, observacao=observacao, origem="cliente")
+
+
+def confirmar_item(con, item_id, usuario_id):
+    """O garçom confere o pedido do QR Code e libera para a fila de Entregas."""
+    regras._validar_usuario(con, usuario_id)
+    item = _item(con, item_id)
+    if item["origem"] != "cliente" or item["confirmado_em"] is not None:
+        raise ErroDeRegra("Este item não está aguardando confirmação.")
+    if item["status"] != "pedido":
+        raise ErroDeRegra("Este item já foi cancelado.")
+    if _comanda(con, item["comanda_id"])["status"] != "aberta":
+        raise ErroDeRegra("A comanda deste item não está aberta.")
+    with con:
+        con.execute("UPDATE pedido_item SET confirmado_por = ?, confirmado_em = datetime('now','localtime') "
+                    "WHERE id = ?", (usuario_id, item_id))
+
+
+def cliente_desistir(con, comanda_id, item_id):
+    """O cliente pode desistir de um item enquanto o garçom ainda não confirmou."""
+    item = _item(con, item_id)
+    if item["comanda_id"] != comanda_id:
+        raise ErroDeRegra("Item não encontrado.")
+    if not (item["origem"] == "cliente" and item["confirmado_em"] is None and item["status"] == "pedido"):
+        raise ErroDeRegra("Este item já foi confirmado. Para cancelar, chame o garçom.")
+    with con:
+        con.execute("UPDATE pedido_item SET status = 'cancelado', cancelado_por = ?, "
+                    "cancelado_em = datetime('now','localtime'), motivo_cancelamento = 'Cliente desistiu' "
+                    "WHERE id = ?", (usuario_qrcode(con), item_id))
+
+
+def itens_aguardando(con):
+    """Pedidos do QR Code esperando um garçom confirmar, dos mais antigos aos mais novos."""
+    return con.execute(
+        f"""SELECT pi.*, p.nome AS produto, c.identificacao, c.mesa
+            FROM pedido_item pi JOIN produto p ON p.id = pi.produto_id JOIN comanda c ON c.id = pi.comanda_id
+            WHERE {SQL_AGUARDANDO} AND c.status = 'aberta' ORDER BY pi.criado_em, pi.id""").fetchall()
