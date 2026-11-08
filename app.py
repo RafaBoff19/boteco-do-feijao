@@ -22,6 +22,7 @@ import compras
 import mesas
 import pedidos
 import regras
+import reposicao
 from regras import ErroDeRegra
 
 app = Flask(__name__)
@@ -112,7 +113,8 @@ def pagina_inicial():
                              (("pedido.entregar",), "entregas"),
                              (("produto.gerir", "fornecedor.gerir"), "cadastros_inicio"),
                              (("usuario.gerir",), "usuarios"),
-                             (("mesa.gerir",), "mesas_lista")]:
+                             (("mesa.gerir",), "mesas_lista"),
+                             (("reposicao.pedir", "reposicao.atender"), "reposicoes_lista")]:
         if pode(*permissoes):
             return url_for(tela)
     return url_for("minha_conta")
@@ -140,7 +142,14 @@ def conferir_login():
 @app.context_processor
 def para_os_templates():
     return {"usuario": g.get("usuario"), "pode": pode, "compras_aviso": _compras_aviso(),
-            "qr_aviso": _qr_aviso()}
+            "qr_aviso": _qr_aviso(), "reposicao_aviso": _reposicao_aviso()}
+
+
+def _reposicao_aviso():
+    """Número no menu Reposição: pedidos do Bar esperando resposta do Estoque."""
+    if g.get("usuario") is None or not pode("reposicao.atender"):
+        return 0
+    return reposicao.contar_pendentes(con())
 
 
 def _qr_aviso():
@@ -1096,6 +1105,97 @@ def mesas_lista():
     lista = [{"numero": m["numero"], "link": f"{base}/m/{m['codigo']}",
               "svg": mesas.qr_svg(f"{base}/m/{m['codigo']}")} for m in mesas.listar_mesas(c)]
     return render_template("mesas.html", lista=lista, base=base)
+
+
+# ---------------------------------------------------------------------
+# Comunicação Bar <-> Estoque (Passo 11)
+# ---------------------------------------------------------------------
+
+@app.route("/reposicao")
+@requer("reposicao.pedir", "reposicao.atender")
+def reposicoes_lista():
+    ver = request.args.get("ver", "pendentes")
+    return render_template("reposicoes.html", lista=reposicao.listar(con(), so_pendentes=(ver == "pendentes")),
+                           ver=ver, nomes=reposicao.STATUS_NOMES)
+
+
+@app.route("/reposicao/nova", methods=["GET", "POST"])
+@requer("reposicao.pedir")
+def reposicao_nova():
+    f = request.form
+    linhas = [{}]
+    if request.method == "POST":
+        linhas = [{"insumo": i, "quantidade": q, "unidade": u}
+                  for i, q, u in zip(f.getlist("insumo"), f.getlist("quantidade"), f.getlist("unidade"))
+                  if i.strip() or q.strip()] or [{}]
+        try:
+            itens = []
+            for n, l in enumerate(linhas, start=1):
+                if not l.get("insumo"):
+                    raise ErroDeRegra(f"Item {n}: escolha o insumo.")
+                try:
+                    itens.append({"insumo_id": int(l["insumo"]), "quantidade": _numero(l["quantidade"]),
+                                  "unidade": l["unidade"]})
+                except (ErroDeRegra, ValueError) as e:
+                    raise ErroDeRegra(f"Item {n}: {e}")
+            rid = reposicao.criar(con(), itens, uid(), urgente=f.get("urgente") == "1", observacao=f.get("observacao"))
+            flash("Pedido enviado ao Estoque.", "ok")
+            return redirect(url_for("reposicao_ver", reposicao_id=rid))
+        except ErroDeRegra as e:
+            flash(str(e), "erro")
+    return render_template("reposicao_form.html", form=f, linhas=linhas, insumos=reposicao.opcoes_de_insumos(con()))
+
+
+@app.route("/reposicao/<int:reposicao_id>")
+@requer("reposicao.pedir", "reposicao.atender")
+def reposicao_ver(reposicao_id):
+    d = reposicao.dados(con(), reposicao_id)
+    if d is None:
+        abort(404)
+    return render_template("reposicao.html", d=d, r=d["reposicao"])
+
+
+@app.post("/reposicao/<int:reposicao_id>/enviar")
+@requer("reposicao.atender")
+def reposicao_enviar(reposicao_id):
+    f = request.form
+    try:
+        enviados = {}
+        for item_id in f.getlist("item"):
+            try:
+                enviados[int(item_id)] = _numero(f.get(f"enviado_{item_id}"))
+            except (ErroDeRegra, ValueError) as e:
+                raise ErroDeRegra(f"{f.get(f'nome_{item_id}', 'Item')}: {e}")
+        r = reposicao.atender(con(), reposicao_id, uid(), enviados, resposta=f.get("resposta"))
+        flash("Enviado ao Bar: transferências registradas.", "ok")
+        for falta in r["faltas"]:
+            flash(f"Enviado menos que o pedido · {falta}", "aviso")
+        _avisos(r)
+    except ErroDeRegra as e:
+        flash(str(e), "erro")
+    return redirect(url_for("reposicao_ver", reposicao_id=reposicao_id))
+
+
+@app.post("/reposicao/<int:reposicao_id>/recusar")
+@requer("reposicao.atender")
+def reposicao_recusar(reposicao_id):
+    try:
+        reposicao.recusar(con(), reposicao_id, uid(), request.form.get("motivo"))
+        flash("Pedido recusado. O Bar vai ver o motivo.", "ok")
+    except ErroDeRegra as e:
+        flash(str(e), "erro")
+    return redirect(url_for("reposicao_ver", reposicao_id=reposicao_id))
+
+
+@app.post("/reposicao/<int:reposicao_id>/cancelar")
+@requer("reposicao.pedir")
+def reposicao_cancelar(reposicao_id):
+    try:
+        reposicao.cancelar(con(), reposicao_id, uid())
+        flash("Pedido cancelado.", "ok")
+    except ErroDeRegra as e:
+        flash(str(e), "erro")
+    return redirect(url_for("reposicao_ver", reposicao_id=reposicao_id))
 
 
 # ---------------------------------------------------------------------

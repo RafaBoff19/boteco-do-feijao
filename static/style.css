@@ -255,3 +255,8 @@ body.cliente .form-login .selo { display: inline-block; margin: 0 0 .6rem; }
   .qr-cartao { border: 1px dashed #999; break-inside: avoid; border-radius: 0; }
   .qr-img svg { max-width: 50mm; }
 }
+
+/* ---------- Reposição Bar <-> Estoque (Passo 11) ---------- */
+.dica-saldo { grid-column: 1 / -1; margin: -.2rem 0 .3rem; font-size: .85rem; color: var(--suave); min-height: 1.2em; }
+.selo-urgente { background: var(--erro-fundo); color: var(--erro); }
+.check-urgente { margin-bottom: .8rem; }

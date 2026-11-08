@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block titulo %}Reposição nº {{ r.id }}{% endblock %}
+{% block conteudo %}
+
+<div class="titulo-linha">
+  <div>
+    <h1>Pedido nº {{ r.id }}</h1>
+    <p class="detalhe">Pedido por {{ r.solicitante }} em {{ r.solicitada_em[8:10] }}/{{ r.solicitada_em[5:7] }} às {{ r.solicitada_em[11:16] }}</p>
+  </div>
+  <a class="botao botao-leve" href="{{ url_for('reposicoes_lista') }}">← Reposição</a>
+</div>
+
+<p>
+  <span class="selo {{ {'pendente': 'selo-baixo', 'atendida': 'selo-ok', 'recusada': 'selo-negativo'}.get(r.status, 'selo-inativo') }} selo-grande">{{ d.status_nome }}</span>
+  {% if r.urgente and r.status == 'pendente' %}<span class="selo selo-urgente selo-grande">Urgente</span>{% endif %}
+</p>
+{% if r.observacao %}<p class="detalhe">Recado do Bar: <em>{{ r.observacao }}</em></p>{% endif %}
+{% if r.respondida_por and r.status != 'cancelada' %}
+<p class="detalhe">Respondido por {{ r.respondente }} em {{ r.respondida_em[8:10] }}/{{ r.respondida_em[5:7] }} às {{ r.respondida_em[11:16] }}{% if r.resposta %} · <em>{{ r.resposta }}</em>{% endif %}</p>
+{% endif %}
+
+{% set atendendo = r.status == 'pendente' and pode('reposicao.atender') %}
+
+{% if atendendo %}
+<form method="post" action="{{ url_for('reposicao_enviar', reposicao_id=r.id) }}" novalidate>
+  <h2>Separar e enviar</h2>
+  <p class="dica">Confira o que vai sair do Estoque para o Bar. Se enviar menos, corrija a quantidade (0 = não enviou).</p>
+{% else %}
+  <h2>Itens</h2>
+{% endif %}
+
+<ul class="itens-pedido">
+  {% for i in d.itens %}
+  <li class="pedido {{ 'pedido-entregue' if r.status == 'atendida' }}">
+    <div class="pedido-topo"><strong>{{ i.pedida|br }} {{ i.nome_unidade }} · {{ i.nome }}</strong></div>
+    <div class="detalhe">
+      {% if i.unidade == 'compra' and i.fator_compra != 1 %}= {{ i.quantidade|br }} {{ i.unidade_consumo }} · {% endif %}
+      Estoque tem {{ i.no_estoque|br }} {{ i.unidade_consumo }} · Bar tem {{ i.no_bar|br }} {{ i.unidade_consumo }}
+    </div>
+    {% if r.status == 'atendida' %}
+    <div class="detalhe">Enviado: <strong>{{ i.enviada|br }} {{ i.nome_unidade }}</strong>
+      {% if i.enviada < i.pedida - 0.000001 %}<span class="selo selo-baixo">enviou menos</span>{% endif %}</div>
+    {% endif %}
+    {% if atendendo %}
+    <input type="hidden" name="item" value="{{ i.id }}">
+    <input type="hidden" name="nome_{{ i.id }}" value="{{ i.nome }}">
+    <div class="linha receber-linha">
+      <div class="campo">
+        <label for="e-{{ i.id }}">Enviar ({{ i.nome_unidade }})</label>
+        <input type="text" id="e-{{ i.id }}" name="enviado_{{ i.id }}" inputmode="decimal" autocomplete="off" value="{{ i.pedida|inp }}">
+      </div>
+    </div>
+    {% endif %}
+  </li>
+  {% endfor %}
+</ul>
+
+{% if atendendo %}
+  <div class="campo">
+    <label for="resposta">Recado para o Bar <span class="opc">(opcional)</span></label>
+    <input type="text" id="resposta" name="resposta" maxlength="200" autocomplete="off" placeholder="ex.: mandei o que tinha">
+  </div>
+  <button type="submit" class="botao botao-grande botao-entregue">ENVIAR AO BAR</button>
+</form>
+
+<div class="decisao">
+  <h2>Não vai atender?</h2>
+  <form method="post" action="{{ url_for('reposicao_recusar', reposicao_id=r.id) }}" class="acoes-pedido">
+    <label class="so-leitor" for="motivo">Motivo da recusa</label>
+    <input type="text" id="motivo" name="motivo" maxlength="200" placeholder="Motivo (ex.: acabou no Estoque)" required autocomplete="off">
+    <button type="submit" class="botao botao-leve">Recusar</button>
+  </form>
+</div>
+{% endif %}
+
+{% if r.status == 'pendente' and r.solicitada_por == usuario.id %}
+<form method="post" action="{{ url_for('reposicao_cancelar', reposicao_id=r.id) }}" class="decisao">
+  <button type="submit" class="botao botao-leve botao-pequeno">Cancelar meu pedido</button>
+</form>
+{% endif %}
+{% endblock %}

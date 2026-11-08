@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block titulo %}Pedir ao Estoque{% endblock %}
+
+{% macro linha_item(l) %}
+<div class="linha-receita linha-reposicao">
+  <div class="campo">
+    <label>Insumo</label>
+    <select name="insumo">
+      <option value="">Escolha...</option>
+      {% for categoria, grupo in insumos|groupby('categoria') %}
+      <optgroup label="{{ categoria }}">
+        {% for i in grupo %}<option value="{{ i.id }}" data-ucons="{{ i.unidade_consumo }}" data-ucompra="{{ i.unidade_compra }}" data-fator="{{ i.fator_compra|br }}"
+                data-bar="{{ i.no_bar|br }}" data-estoque="{{ i.no_estoque|br }}" {{ 'selected' if l.get('insumo') == i.id|string }}>{{ i.nome }}</option>{% endfor %}
+      </optgroup>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="campo">
+    <label>Quantidade</label>
+    <input name="quantidade" type="text" inputmode="decimal" autocomplete="off" value="{{ l.get('quantidade', '') }}">
+  </div>
+  <div class="campo">
+    <label>Medida</label>
+    <select name="unidade">
+      <option value="compra" {{ 'selected' if l.get('unidade', 'compra') == 'compra' }}>Unidade de compra</option>
+      <option value="consumo" {{ 'selected' if l.get('unidade') == 'consumo' }}>Unidade de consumo</option>
+    </select>
+  </div>
+  <button type="button" class="remover" aria-label="Remover item" title="Remover item">✕</button>
+  <p class="dica-saldo"></p>
+</div>
+{% endmacro %}
+
+{% block conteudo %}
+<h1>Pedir ao Estoque</h1>
+
+<form method="post" class="form form-largo" novalidate>
+  <fieldset class="receita">
+    <legend>O que está faltando no Bar?</legend>
+    <div id="linhas">
+      {% for l in linhas %}{{ linha_item(l) }}{% endfor %}
+    </div>
+    <button type="button" id="adicionar" class="botao botao-leve botao-pequeno">+ Item</button>
+  </fieldset>
+
+  <template id="modelo-linha">{{ linha_item({}) }}</template>
+
+  <div class="campo">
+    <label for="observacao">Recado <span class="opc">(opcional)</span></label>
+    <input id="observacao" name="observacao" type="text" autocomplete="off" maxlength="200" value="{{ form.get('observacao', '') }}" placeholder="ex.: a casa está cheia">
+  </div>
+  <label class="check check-urgente"><input type="checkbox" name="urgente" value="1" {{ 'checked' if form.get('urgente') == '1' }}> É urgente</label>
+
+  <button type="submit" class="botao botao-grande">Enviar ao Estoque</button>
+  <p class="voltar"><a href="{{ url_for('reposicoes_lista') }}">Cancelar e voltar</a></p>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const area = document.getElementById('linhas');
+  const modelo = document.getElementById('modelo-linha');
+
+  function atualizar(linha) {
+    const sel = linha.querySelector('select[name="insumo"]');
+    const opt = sel.options[sel.selectedIndex];
+    const medida = linha.querySelector('select[name="unidade"]');
+    const dica = linha.querySelector('.dica-saldo');
+    if (opt && opt.value) {
+      const d = opt.dataset;
+      medida.options[0].textContent = 'Em ' + d.ucompra + (d.fator !== '1' ? ' (' + d.fator + ' ' + d.ucons + ')' : '');
+      medida.options[1].textContent = 'Em ' + d.ucons;
+      dica.textContent = 'Bar tem ' + d.bar + ' ' + d.ucons + ' · Estoque tem ' + d.estoque + ' ' + d.ucons;
+    } else {
+      medida.options[0].textContent = 'Unidade de compra';
+      medida.options[1].textContent = 'Unidade de consumo';
+      dica.textContent = '';
+    }
+  }
+
+  function ligar(linha) {
+    linha.querySelector('select[name="insumo"]').addEventListener('change', function () { atualizar(linha); });
+    linha.querySelector('.remover').addEventListener('click', function () {
+      if (area.children.length > 1) { linha.remove(); return; }
+      linha.querySelector('input').value = '';
+      linha.querySelector('select[name="insumo"]').value = '';
+      atualizar(linha);
+    });
+    atualizar(linha);
+  }
+
+  area.querySelectorAll('.linha-reposicao').forEach(ligar);
+  document.getElementById('adicionar').addEventListener('click', function () {
+    area.appendChild(modelo.content.cloneNode(true));
+    const nova = area.lastElementChild;
+    ligar(nova);
+    nova.querySelector('select').focus();
+  });
+})();
+</script>
+{% endblock %}

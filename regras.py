@@ -87,10 +87,11 @@ def _fmt(valor):
 
 
 def _inserir(con, insumo_id, setor_id, tipo, quantidade, usuario_id,
-             motivo=None, fornecedor_id=None, transferencia_id=None, pedido_item_id=None, compra_item_id=None):
+             motivo=None, fornecedor_id=None, transferencia_id=None, pedido_item_id=None, compra_item_id=None,
+             reposicao_item_id=None):
     """Grava uma movimentação (quantidade COM sinal). O saldo é atualizado pelo trigger do banco.
 
-    pedido_item_id / compra_item_id ligam a movimentação ao pedido ou à compra que a causou.
+    pedido_item_id / compra_item_id / reposicao_item_id ligam a movimentação ao que a causou.
     Só entram no INSERT quando informados (são colunas criadas por migrações).
     """
     colunas = {"insumo_id": insumo_id, "setor_id": setor_id, "tipo": tipo, "quantidade": quantidade,
@@ -100,6 +101,8 @@ def _inserir(con, insumo_id, setor_id, tipo, quantidade, usuario_id,
         colunas["pedido_item_id"] = pedido_item_id
     if compra_item_id is not None:
         colunas["compra_item_id"] = compra_item_id
+    if reposicao_item_id is not None:
+        colunas["reposicao_item_id"] = reposicao_item_id
     # os nomes das colunas vêm só deste código (nunca do usuário), então montar o SQL assim é seguro
     cur = con.execute(
         f"INSERT INTO movimentacao ({', '.join(colunas)}) VALUES ({', '.join('?' * len(colunas))})",

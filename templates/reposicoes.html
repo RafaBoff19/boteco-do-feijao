@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block titulo %}Reposição{% endblock %}
+{% block conteudo %}
+
+<div class="titulo-linha">
+  <h1>Reposição do Bar</h1>
+  {% if pode('reposicao.pedir') %}<a class="botao" href="{{ url_for('reposicao_nova') }}">+ Pedir ao Estoque</a>{% endif %}
+</div>
+
+<p class="filtro-linha">
+  <a href="{{ url_for('reposicoes_lista', ver=('todas' if ver == 'pendentes' else 'pendentes')) }}">{{ 'Ver também as respondidas' if ver == 'pendentes' else 'Ver só as pendentes' }}</a>
+</p>
+
+{% if not lista %}<p class="vazio">Nenhum pedido {{ 'pendente' if ver == 'pendentes' }}.</p>{% endif %}
+
+<div class="cards">
+  {% for r in lista %}
+  {% set cor = {'pendente': 'card-baixo', 'atendida': 'card-ok', 'recusada': 'card-negativo'}.get(r.status, '') %}
+  <a class="card card-link {{ cor }} {{ 'card-fechada' if r.status in ('recusada', 'cancelada') }}" href="{{ url_for('reposicao_ver', reposicao_id=r.id) }}">
+    <div class="card-topo">
+      <h3>Pedido nº {{ r.id }}</h3>
+      {% if r.urgente and r.status == 'pendente' %}<span class="selo selo-urgente">Urgente</span>{% endif %}
+      <span class="selo {{ {'pendente': 'selo-baixo', 'atendida': 'selo-ok', 'recusada': 'selo-negativo'}.get(r.status, 'selo-inativo') }}">{{ nomes[r.status] }}</span>
+    </div>
+    <p class="detalhe resumo-itens">{{ r.resumo }}</p>
+    <p class="detalhe">Pedido por {{ r.solicitante }} às {{ r.solicitada_em[11:16] }} de {{ r.solicitada_em[8:10] }}/{{ r.solicitada_em[5:7] }}</p>
+    {% if r.resposta %}<p class="detalhe"><em>{{ r.resposta }}</em></p>{% endif %}
+  </a>
+  {% endfor %}
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  // Atualiza sozinho para ver pedidos e respostas novas.
+  setInterval(function () {
+    var a = document.activeElement;
+    if ((!a || a === document.body) && window.scrollY < 200) { location.reload(); }
+  }, 20000);
+</script>
+{% endblock %}
